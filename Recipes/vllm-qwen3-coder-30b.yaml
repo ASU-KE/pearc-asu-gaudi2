@@ -1,0 +1,213 @@
+---
+# Qwen3-Coder-30B-A3B-Instruct - Single Gaudi deployment with 128K context
+# Non-FP8 full precision model. Uses chunked prefill for stable long-context inference.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-qwen3-coder-30b
+  namespace: aibrix-system-llm
+  labels:
+    app: vllm-qwen3-coder-30b
+    model.aibrix.ai/name: qwen3-coder-30b-a3b-instruct
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-qwen3-coder-30b
+  template:
+    metadata:
+      labels:
+        app: vllm-qwen3-coder-30b
+        model.aibrix.ai/name: qwen3-coder-30b-a3b-instruct
+    spec:
+      serviceAccountName: aibrix-vllm-sa
+      runtimeClassName: habana
+      hostIPC: true
+      securityContext:
+        runAsNonRoot: false
+        runAsUser: 0
+      tolerations:
+        - key: "habana"
+          operator: "Exists"
+          effect: "NoSchedule"
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: vllm-qwen3-coder-30b
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: vllm
+          image: registry.rc.asu.edu/vllm-gaudi:20260123
+          imagePullPolicy: Always
+          command:
+            - /bin/bash
+            - -c
+            - |
+              # Patch the sampling bug: replace assertion with conditional check
+              # Preserve indentation by matching the full line pattern
+              sed -i 's/^\([[:space:]]*\)assert sampling_metadata\.prompt_token_ids is not None/\1if sampling_metadata.prompt_token_ids is None: return logits/' \
+                /workspace/vllm/vllm/v1/sample/sampler.py || true
+              
+              # Start vLLM with original entrypoint
+              exec /entrypoint.sh \
+                --model Qwen/Qwen3-Coder-30B-A3B-Instruct \
+                --host 0.0.0.0 \
+                --port 8000 \
+                --tensor-parallel-size 1 \
+                --max-model-len 131072 \
+                --max-num-seqs 2 \
+                --gpu-memory-utilization 0.85 \
+                --block-size 128 \
+                --max-num-batched-tokens 4096 \
+                --enable-chunked-prefill \
+                --served-model-name qwen3-coder-30b-a3b-instruct \
+                --enable-auto-tool-choice \
+                --tool-call-parser qwen3_coder
+          env:
+            - name: MODEL
+              value: "Qwen/Qwen3-Coder-30B-A3B-Instruct"
+            - name: HF_HOME
+              value: "/mnt/hf_cache"
+            - name: HUGGINGFACE_HUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: huggingface-token
+                  key: HUGGINGFACE_HUB_TOKEN
+            - name: HPU_MEM
+              value: '{"GAUDI2": 96, "GAUDI3": 128}'
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            
+            # HPU Graph optimization - Optimized for 128K context on 1 HPU
+            - name: VLLM_SKIP_WARMUP
+              value: "true"  # Skip warmup to avoid OOM with tight memory (85% utilization)
+            - name: VLLM_GRAPH_RESERVED_MEM
+              value: "0.12"   # Aligned with stable instruct/thinking configs
+            - name: VLLM_GRAPH_PROMPT_RATIO
+              value: "0.15"   # Balanced: allow KV cache growth while maintaining graph efficiency
+            - name: VLLM_GRAPH_PROMPT_STRATEGY
+              value: "max_bs"
+            - name: VLLM_GRAPH_DECODE_STRATEGY
+              value: "max_bs"
+            
+            # Bucketing optimization - Adjusted for 128K context
+            - name: VLLM_EXPONENTIAL_BUCKETING
+              value: "True"
+            
+            # Batch size buckets - Aligned to max-num-seqs=2
+            - name: VLLM_PROMPT_BS_BUCKET_MIN
+              value: "1"
+            - name: VLLM_PROMPT_BS_BUCKET_STEP
+              value: "1"      # Buckets: 1, 2 (matches max-num-seqs=2)
+            - name: VLLM_PROMPT_BS_BUCKET_MAX
+              value: "2"
+            - name: VLLM_DECODE_BS_BUCKET_MIN
+              value: "1"
+            - name: VLLM_DECODE_BS_BUCKET_STEP
+              value: "1"
+            - name: VLLM_DECODE_BS_BUCKET_MAX
+              value: "2"
+            
+            # Sequence length buckets - Extended for 128K context
+            # Note: Smaller step to avoid Habana tensor size limits
+            - name: VLLM_PROMPT_SEQ_BUCKET_MIN
+              value: "128"
+            - name: VLLM_PROMPT_SEQ_BUCKET_STEP
+              value: "4096"
+            - name: VLLM_PROMPT_SEQ_BUCKET_MAX
+              value: "131072"   # 128K max context
+            
+            # Decode block buckets - Extended for 128K context
+            - name: VLLM_DECODE_BLOCK_BUCKET_MIN
+              value: "128"
+            - name: VLLM_DECODE_BLOCK_BUCKET_STEP
+              value: "1024"
+            - name: VLLM_DECODE_BLOCK_BUCKET_MAX
+              value: "8192"
+            
+            # Performance tuning
+            - name: PT_HPU_LAZY_MODE
+              value: "1"
+            - name: PT_HPU_ENABLE_LAZY_COLLECTIVES
+              value: "true"
+            
+            # Recipe cache - Shared across replicas for efficiency
+            - name: PT_HPU_RECIPE_CACHE_CONFIG
+              value: "/mnt/hf_cache/qwen3_coder_30b_recipe_cache/,True,131072"
+            
+            - name: RUNTIME_SCALE_PATCHING
+              value: "1"
+            
+            # Additional Gaudi optimizations
+            - name: LOG_LEVEL_ALL
+              value: "3"
+            - name: ENABLE_CONSOLE
+              value: "true"
+            
+          resources:
+            requests:
+              cpu: "8"
+              memory: "64Gi"
+              habana.ai/gaudi: "1"
+              hugepages-2Mi: "4Gi"
+            limits:
+              cpu: "16"
+              memory: "64Gi"
+              habana.ai/gaudi: "1"
+              hugepages-2Mi: "4Gi"
+          ports:
+            - containerPort: 8000
+              name: serve
+          volumeMounts:
+            - name: model-cache
+              mountPath: /mnt/hf_cache
+            - name: shm
+              mountPath: /dev/shm
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 120  # Quick startup
+            periodSeconds: 60
+            timeoutSeconds: 60
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 120  # Quick startup
+            periodSeconds: 120
+            timeoutSeconds: 60
+            failureThreshold: 3
+      volumes:
+        - name: model-cache
+          hostPath:
+            path: /mnt/hf_cache
+            type: DirectoryOrCreate
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: "4Gi"
+
+---
+# Service for Qwen3-Coder-30B-A3B-Instruct
+apiVersion: v1
+kind: Service
+metadata:
+  name: qwen3-coder-30b-a3b-instruct
+  namespace: aibrix-system-llm
+  labels:
+    model.aibrix.ai/name: qwen3-coder-30b-a3b-instruct
+spec:
+  selector:
+    app: vllm-qwen3-coder-30b
+  ports:
+    - name: serve
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+

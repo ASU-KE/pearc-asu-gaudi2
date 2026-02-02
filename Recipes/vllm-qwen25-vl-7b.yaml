@@ -1,0 +1,218 @@
+---
+# Qwen2.5-VL-7B-Instruct - Vision-Language Model on Gaudi
+# Official vLLM Gaudi plugin image with validated TP=1 configuration
+# Reference: https://docs.vllm.ai/projects/gaudi/en/latest/getting_started/quickstart/quickstart.html
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-qwen25-vl-7b
+  namespace: aibrix-system-llm
+  labels:
+    app: vllm-qwen25-vl-7b
+    model.aibrix.ai/name: qwen25-vl-7b
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-qwen25-vl-7b
+  template:
+    metadata:
+      labels:
+        app: vllm-qwen25-vl-7b
+        model.aibrix.ai/name: qwen25-vl-7b
+    spec:
+      serviceAccountName: aibrix-vllm-sa
+      runtimeClassName: habana
+      hostIPC: true
+      securityContext:
+        runAsNonRoot: false
+        runAsUser: 0
+      tolerations:
+        - key: "habana"
+          operator: "Exists"
+          effect: "NoSchedule"
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: vllm-qwen25-vl-7b
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: vllm
+          # Official Habana vLLM plugin image (v2.9.0 with Gaudi software 1.23.0)
+          image: vault.habana.ai/gaudi-docker/1.23.0/ubuntu24.04/habanalabs/vllm-plugin-2.9.0:latest
+          imagePullPolicy: Always
+          command:
+            - /bin/bash
+            - -c
+            - |
+              # Patch the sampling bug: replace assertion with conditional check
+              # This fixes AssertionError when prompt_token_ids is None for cached requests
+              # Preserve indentation by matching the full line pattern
+              sed -i 's/^\([[:space:]]*\)assert sampling_metadata\.prompt_token_ids is not None/\1if sampling_metadata.prompt_token_ids is None: return logits/' \
+                /usr/local/lib/python3.12/dist-packages/vllm/v1/sample/sampler.py || true
+              
+              # Start vLLM with original entrypoint
+              exec python -m vllm.entrypoints.openai.api_server \
+                --model Qwen/Qwen2.5-VL-7B-Instruct \
+                --host 0.0.0.0 \
+                --port 8000 \
+                --tensor-parallel-size 1 \
+                --max-model-len 32768 \
+                --max-num-seqs 1 \
+                --enforce-eager \
+                --gpu-memory-utilization 0.70 \
+                --block-size 128 \
+                --served-model-name qwen25-vl-7b \
+                --no-enable-prefix-caching \
+                --no-enable-chunked-prefill \
+                --limit-mm-per-prompt '{"image":4,"video":0}'
+          env:
+            - name: MODEL
+              value: "Qwen/Qwen2.5-VL-7B-Instruct"
+            - name: HF_HOME
+              value: "/mnt/hf_cache"
+            - name: HUGGINGFACE_HUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: huggingface-token
+                  key: HUGGINGFACE_HUB_TOKEN
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: VLLM_MULTIMODAL_BUCKETS
+              value: "None" # Disable multimodal buckets to avoid very large vision graphs
+            
+            # HPU Graph optimization for VL model
+            # Skip warmup to avoid OOM during vision encoder graph compilation
+            - name: VLLM_SKIP_WARMUP
+              value: "true"
+            - name: VLLM_GRAPH_RESERVED_MEM
+              value: "0.15"
+            - name: VLLM_GRAPH_PROMPT_RATIO
+              value: "0.10"
+            - name: VLLM_GRAPH_PROMPT_STRATEGY
+              value: "max_bs"
+            - name: VLLM_GRAPH_DECODE_STRATEGY
+              value: "max_bs"
+            
+            # Bucketing optimization
+            - name: VLLM_EXPONENTIAL_BUCKETING
+              value: "True"
+            
+            # Batch size buckets - Reduced for VL model memory constraints
+            - name: VLLM_PROMPT_BS_BUCKET_MIN
+              value: "1"
+            - name: VLLM_PROMPT_BS_BUCKET_STEP
+              value: "1"
+            - name: VLLM_PROMPT_BS_BUCKET_MAX
+              value: "2"
+            - name: VLLM_DECODE_BS_BUCKET_MIN
+              value: "1"
+            - name: VLLM_DECODE_BS_BUCKET_STEP
+              value: "1"
+            - name: VLLM_DECODE_BS_BUCKET_MAX
+              value: "2"
+            
+            # Sequence length buckets for 32K context
+            - name: VLLM_PROMPT_SEQ_BUCKET_MIN
+              value: "128"
+            - name: VLLM_PROMPT_SEQ_BUCKET_STEP
+              value: "2048"
+            - name: VLLM_PROMPT_SEQ_BUCKET_MAX
+              value: "32768"
+            
+            # Decode block buckets
+            - name: VLLM_DECODE_BLOCK_BUCKET_MIN
+              value: "128"
+            - name: VLLM_DECODE_BLOCK_BUCKET_STEP
+              value: "512"
+            - name: VLLM_DECODE_BLOCK_BUCKET_MAX
+              value: "4096"
+            
+            # Performance tuning
+            # Disable lazy mode to prevent visual encoder graph compilation (SRAM overflow)
+            # This forces eager execution for all operations, avoiding SRAM limits
+            - name: PT_HPU_LAZY_MODE
+              value: "0"
+            - name: PT_HPU_ENABLE_LAZY_COLLECTIVES
+              value: "false"
+            
+            # Recipe cache
+            - name: PT_HPU_RECIPE_CACHE_CONFIG
+              value: "/mnt/hf_cache/qwen25_vl_7b_recipe_cache/,True,32768"
+            
+            # Additional Gaudi optimizations
+            - name: LOG_LEVEL_ALL
+              value: "3"
+            - name: ENABLE_CONSOLE
+              value: "true"
+            
+          resources:
+            requests:
+              cpu: "8"
+              memory: "48Gi"
+              habana.ai/gaudi: "1"
+              hugepages-2Mi: "4Gi"
+            limits:
+              cpu: "16"
+              memory: "64Gi"
+              habana.ai/gaudi: "1"
+              hugepages-2Mi: "4Gi"
+          ports:
+            - containerPort: 8000
+              name: serve
+          volumeMounts:
+            - name: model-cache
+              mountPath: /mnt/hf_cache
+            - name: shm
+              mountPath: /dev/shm
+            - name: habana-cache
+              mountPath: /root/.habana
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 60
+            timeoutSeconds: 60
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 120
+            timeoutSeconds: 60
+            failureThreshold: 3
+      volumes:
+        - name: model-cache
+          hostPath:
+            path: /mnt/hf_cache
+            type: DirectoryOrCreate
+        - name: habana-cache
+          emptyDir: {}
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: "4Gi"
+
+---
+# Service for Qwen2.5-VL-7B-Instruct
+apiVersion: v1
+kind: Service
+metadata:
+  name: qwen25-vl-7b
+  namespace: aibrix-system-llm
+  labels:
+    model.aibrix.ai/name: qwen25-vl-7b
+spec:
+  selector:
+    app: vllm-qwen25-vl-7b
+  ports:
+    - name: serve
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP

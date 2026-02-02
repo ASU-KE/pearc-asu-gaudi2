@@ -1,0 +1,561 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: image-generation
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stable-diffusion-sdxl
+  namespace: image-generation
+  labels:
+    app: stable-diffusion-sdxl
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stable-diffusion-sdxl
+  template:
+    metadata:
+      labels:
+        app: stable-diffusion-sdxl
+    spec:
+      runtimeClassName: habana
+      hostIPC: true
+      securityContext:
+        runAsNonRoot: false
+        runAsUser: 0
+      tolerations:
+        - key: "habana"
+          operator: "Exists"
+          effect: "NoSchedule"
+      containers:
+        - name: stable-diffusion-sdxl
+          image: vault.habana.ai/gaudi-docker/1.23.0/ubuntu24.04/habanalabs/vllm-installer-2.9.0:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - bash
+            - -c
+            - |
+              set -e
+              echo "Installing SDXL dependencies..."
+              pip install --upgrade-strategy eager diffusers transformers accelerate Pillow safetensors requests huggingface-hub fastapi uvicorn python-multipart optimum-quanto
+              
+              echo "Starting image generation API..."
+              python /app/server.py 
+          env:
+            - name: HF_HOME
+              value: "/mnt/hf_cache"
+            - name: HUGGINGFACE_HUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: huggingface-token
+                  key: HUGGINGFACE_HUB_TOKEN
+            # HF_TOKEN is what huggingface_hub library looks for
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: huggingface-token
+                  key: HUGGINGFACE_HUB_TOKEN
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            # Disable model switching via API (use whatever model is loaded at startup)
+            - name: DISABLE_MODEL_SWITCHING
+              value: "true"
+          resources:
+            requests:
+              cpu: "8"
+              memory: "64Gi"
+              habana.ai/gaudi: "1"
+              hugepages-2Mi: "4Gi"
+            limits:
+              cpu: "16"
+              memory: "128Gi"
+              habana.ai/gaudi: "1"
+              hugepages-2Mi: "4Gi"
+          ports:
+            - containerPort: 8000
+              name: api
+          volumeMounts:
+            - name: model-cache
+              mountPath: /mnt/hf_cache
+            - name: shm
+              mountPath: /dev/shm
+            - name: app-script
+              mountPath: /app
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 600
+            periodSeconds: 60
+            timeoutSeconds: 30
+      volumes:
+        - name: model-cache
+          hostPath:
+            path: /mnt/hf_cache
+            type: DirectoryOrCreate
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: "16Gi"
+        - name: app-script
+          configMap:
+            name: stable-diffusion-sdxl-script
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: stable-diffusion-sdxl-script
+  namespace: image-generation
+data:
+  server.py: |
+    """
+    Image generation on Habana Gaudi2: Flux, SD 3.5, SDXL.
+    OpenAI-compatible API on port 8000.
+    """
+    from diffusers import FluxPipeline, Flux2Pipeline, StableDiffusion3Pipeline, StableDiffusionXLPipeline
+    from diffusers import Flux2Transformer2DModel, QuantoConfig
+    from PIL import Image
+    import torch
+    import gc
+    import os
+    import io
+    import base64
+    import time
+    import random
+    import threading
+    from typing import Optional, List
+    from pydantic import BaseModel
+    from fastapi import FastAPI, HTTPException
+    from fastapi.middleware.cors import CORSMiddleware
+    import uvicorn
+    
+    # Supported models: Flux 2, Flux 1, SD 3.5, SDXL. Key: display name; value: repo, type.
+    MODELS = {
+        "Flux.2 Dev": {"repo": "black-forest-labs/FLUX.2-dev", "type": "flux2"},
+        "Flux.1 Schnell": {"repo": "black-forest-labs/FLUX.1-schnell", "type": "flux"},
+        "Flux.1 Dev": {"repo": "black-forest-labs/FLUX.1-dev", "type": "flux"},
+        "SD 3.5 Large": {"repo": "stabilityai/stable-diffusion-3.5-large", "type": "sd3"},
+        "SD 3.5 Large Turbo": {"repo": "stabilityai/stable-diffusion-3.5-large-turbo", "type": "sd3"},
+        "SD 3.5 Medium": {"repo": "stabilityai/stable-diffusion-3.5-medium", "type": "sd3"},
+        "SDXL Base 1.0": {"repo": "stabilityai/stable-diffusion-xl-base-1.0", "type": "sdxl"},
+        "Playground v2.5": {"repo": "playgroundai/playground-v2.5-1024px-aesthetic", "type": "sdxl"},
+    }
+    
+    current_model_name = "black-forest-labs/FLUX.1-schnell"
+    current_model_type = "flux"
+    pipeline = None
+    pipeline_lock = threading.Lock()
+    
+    def get_model_info(model_key):
+        """Get model info by display name or repo"""
+        # Direct match by display name
+        if model_key in MODELS:
+            return model_key, MODELS[model_key]
+        # Search by repo
+        for name, info in MODELS.items():
+            if info["repo"] == model_key:
+                return name, info
+        return None, None
+    
+    def load_model(model_key):
+        global pipeline, current_model_name, current_model_type
+        
+        display_name, model_info = get_model_info(model_key)
+        if not model_info:
+            return f"Error: Unknown model: {model_key}"
+        
+        repo = model_info["repo"]
+        model_type = model_info["type"]
+        
+        # Store old pipeline in case load fails
+        old_pipeline = pipeline
+        
+        try:
+            print(f'Loading {model_type.upper()} model: {display_name} ({repo})...')
+            start_time = time.time()
+            
+            # Get HF token from environment
+            hf_token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_HUB_TOKEN")
+            if hf_token:
+                print(f"  [AUTH] Using HF token: {hf_token[:8]}...{hf_token[-4:]}")
+            else:
+                print("  [AUTH] WARNING: No HuggingFace token found!")
+            
+            # Clear memory before loading large models
+            gc.collect()
+            if hasattr(torch, 'hpu') and hasattr(torch.hpu, 'empty_cache'):
+                torch.hpu.empty_cache()
+            
+            # Load appropriate pipeline based on model type
+            if model_type == "flux2":
+                # FLUX.2 is 32B params - use INT8 quantization to fit in memory
+                print(f"  [MEM] Loading transformer with INT8 quantization...")
+                quantization_config = QuantoConfig(weights_dtype="int8")
+                
+                # Load transformer with INT8 quantization (32B params: 64GB -> 32GB)
+                transformer = Flux2Transformer2DModel.from_pretrained(
+                    repo,
+                    subfolder="transformer",
+                    quantization_config=quantization_config,
+                    torch_dtype=torch.bfloat16,
+                    token=hf_token,
+                    low_cpu_mem_usage=True,
+                )
+                print(f"  [MEM] Transformer loaded with INT8, loading full pipeline...")
+                
+                # Load full pipeline with the quantized transformer
+                new_pipeline = Flux2Pipeline.from_pretrained(
+                    repo,
+                    transformer=transformer,
+                    torch_dtype=torch.bfloat16,
+                    token=hf_token,
+                    low_cpu_mem_usage=True,
+                )
+            elif model_type == "flux":
+                new_pipeline = FluxPipeline.from_pretrained(
+                    repo,
+                    torch_dtype=torch.bfloat16,
+                    token=hf_token,
+                )
+            elif model_type == "sd3":
+                new_pipeline = StableDiffusion3Pipeline.from_pretrained(
+                    repo,
+                    torch_dtype=torch.bfloat16,
+                    use_safetensors=True,
+                    token=hf_token,
+                )
+            elif model_type == "sdxl":
+                new_pipeline = StableDiffusionXLPipeline.from_pretrained(
+                    repo,
+                    torch_dtype=torch.bfloat16,
+                    use_safetensors=True,
+                    token=hf_token,
+                )
+            
+            # Move to HPU
+            new_pipeline = new_pipeline.to("hpu")
+            
+            # Enable memory optimizations for large models
+            if model_type in ("flux2", "flux"):
+                try:
+                    new_pipeline.enable_attention_slicing("max")
+                    print(f"  [MEM] Enabled attention slicing")
+                except Exception as e:
+                    print(f"  [MEM] Attention slicing not available: {e}")
+            
+            # Success! Now clean up old pipeline and assign new one
+            if old_pipeline is not None:
+                del old_pipeline
+                gc.collect()
+                if hasattr(torch, 'hpu') and hasattr(torch.hpu, 'empty_cache'):
+                    torch.hpu.empty_cache()
+            
+            pipeline = new_pipeline
+            current_model_name = repo
+            current_model_type = model_type
+            load_time = time.time() - start_time
+            
+            print(f'{model_type.upper()} Model loaded in {load_time:.1f}s!')
+            return f"Loaded: {display_name}\nTime: {load_time:.1f}s\nType: {model_type.upper()}"
+        except Exception as e:
+            # Keep old pipeline if load failed
+            print(f"Error loading model: {e}")
+            import traceback
+            traceback.print_exc()
+            return f"Error: {str(e)[:300]}"
+    
+    def generate_image_internal(prompt, negative_prompt=None, num_images=1, 
+                                num_inference_steps=30, guidance_scale=7.0, 
+                                width=1024, height=1024, seed=-1):
+        """Internal generation function used by both Gradio and API"""
+        global pipeline, current_model_type
+        
+        with pipeline_lock:
+            if pipeline is None:
+                load_model(current_model_name)
+            
+            try:
+                print(f"[{current_model_type.upper()}] Generation: prompt='{prompt[:60]}...' steps={num_inference_steps} cfg={guidance_scale} size={width}x{height}")
+                
+                # Handle seed
+                if seed == -1:
+                    seed = random.randint(0, 2**32 - 1)
+                
+                generator = None
+                try:
+                    generator = torch.Generator(device="hpu").manual_seed(int(seed))
+                except Exception:
+                    generator = torch.Generator().manual_seed(int(seed))
+                
+                # Minimum sizes
+                width = max(1024, width)
+                height = max(1024, height)
+                
+                start_time = time.time()
+                
+                if current_model_type == "flux2":
+                    # Flux 2 - 32B params, recommended 28-50 steps, guidance 4.0
+                    outputs = pipeline(
+                        prompt=prompt,
+                        num_images_per_prompt=int(num_images),
+                        num_inference_steps=int(num_inference_steps),
+                        guidance_scale=4.0,  # Flux 2 works best with guidance ~4
+                        width=int(width),
+                        height=int(height),
+                        generator=generator,
+                    )
+                elif current_model_type == "flux":
+                    # Flux 1 - Schnell works best with 4 steps, Dev with 20-50
+                    outputs = pipeline(
+                        prompt=prompt,
+                        num_images_per_prompt=int(num_images),
+                        num_inference_steps=int(num_inference_steps),
+                        guidance_scale=float(guidance_scale),
+                        width=int(width),
+                        height=int(height),
+                        generator=generator,
+                    )
+                elif current_model_type == "sd3":
+                    outputs = pipeline(
+                        prompt=prompt,
+                        negative_prompt=negative_prompt if negative_prompt else "",
+                        num_images_per_prompt=int(num_images),
+                        num_inference_steps=int(num_inference_steps),
+                        guidance_scale=float(guidance_scale),
+                        width=int(width),
+                        height=int(height),
+                        generator=generator,
+                    )
+                elif current_model_type == "sdxl":
+                    outputs = pipeline(
+                        prompt=prompt,
+                        negative_prompt=negative_prompt if negative_prompt else None,
+                        num_images_per_prompt=int(num_images),
+                        num_inference_steps=int(num_inference_steps),
+                        guidance_scale=float(guidance_scale),
+                        width=int(width),
+                        height=int(height),
+                        generator=generator,
+                    )
+                
+                gen_time = time.time() - start_time
+                
+                images = outputs.images
+                print(f"[{current_model_type.upper()}] Generated {len(images)} image(s) in {gen_time:.1f}s")
+                return images, seed
+                
+            except Exception as e:
+                print(f"Error generating image: {e}")
+                import traceback
+                traceback.print_exc()
+                raise e
+    
+    # ============================================================
+    # OpenAI-compatible API
+    # ============================================================
+    
+    api = FastAPI(title="Image Generation Gaudi – OpenAI-compatible API")
+    api.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    
+    class ImageGenerationRequest(BaseModel):
+        prompt: str
+        model: Optional[str] = "sdxl"
+        n: Optional[int] = 1
+        size: Optional[str] = "1024x1024"
+        quality: Optional[str] = "standard"
+        response_format: Optional[str] = "b64_json"  # or "url"
+        style: Optional[str] = None
+    
+    class ImageData(BaseModel):
+        b64_json: Optional[str] = None
+        url: Optional[str] = None
+        revised_prompt: Optional[str] = None
+    
+    class ImageGenerationResponse(BaseModel):
+        created: int
+        data: List[ImageData]
+    
+    @api.get("/")
+    async def root():
+        return {
+            "status": "ok",
+            "service": "Image Generation Gaudi",
+            "current_model": get_current_model_display_name(),
+            "current_repo": current_model_name,
+            "current_type": current_model_type,
+            "available_models": list(MODELS.keys())
+        }
+    
+    def get_current_model_display_name():
+        """Get display name for current model"""
+        for name, info in MODELS.items():
+            if info["repo"] == current_model_name:
+                return name
+        return current_model_name
+    
+    @api.get("/v1/models")
+    async def list_models():
+        """Return all available models"""
+        model_list = []
+        for display_name, info in MODELS.items():
+            model_list.append({
+                "id": display_name,
+                "object": "model",
+                "owned_by": "local",
+                "repo": info["repo"],
+                "type": info["type"],
+                "active": display_name == get_current_model_display_name()
+            })
+        # Add aliases for OpenAI compatibility
+        model_list.append({"id": "dall-e-3", "object": "model", "owned_by": "local", "note": "alias for current model"})
+        return {"object": "list", "data": model_list}
+    
+    @api.post("/v1/models/load")
+    async def load_model_api(model_name: str):
+        """Load a specific model by display name or repo"""
+        display_name, model_info = get_model_info(model_name)
+        if not model_info:
+            raise HTTPException(status_code=404, detail=f"Model not found: {model_name}")
+        
+        result = load_model(model_name)
+        return {"status": "ok" if "Loaded:" in result else "error", "message": result}
+    
+    # Fast models need fewer steps
+    FAST_REPOS = [
+        "black-forest-labs/FLUX.1-schnell",  # 4 steps
+        "stabilityai/stable-diffusion-3.5-large-turbo",  # 4-8 steps
+    ]
+    
+    @api.post("/v1/images/generations")
+    async def create_image(request: ImageGenerationRequest):
+        """OpenAI-compatible image generation endpoint"""
+        global current_model_name, current_model_type
+        
+        try:
+            # Check if model switching is disabled via env var
+            disable_switching = os.environ.get("DISABLE_MODEL_SWITCHING", "true").lower() == "true"
+            
+            # Handle model selection - only switch if explicitly requested AND model exists
+            requested_model = request.model
+            
+            if not disable_switching and requested_model:
+                # Ignore generic model names that don't match our models
+                ignored_models = ["flux", "dall-e-3", "dall-e-2", "sd3", "sdxl", None, "", 
+                                  "stable-diffusion", "default"]
+                
+                if requested_model not in ignored_models:
+                    display_name, model_info = get_model_info(requested_model)
+                    if model_info and model_info["repo"] != current_model_name:
+                        print(f"[API] Model switch requested: {requested_model}")
+                        result = load_model(display_name)
+                        if "Error:" in result:
+                            print(f"[API] Model switch failed, continuing with: {get_current_model_display_name()}")
+                    elif not model_info:
+                        print(f"[API] Unknown model '{requested_model}', using: {get_current_model_display_name()}")
+            
+            # Parse size
+            try:
+                width, height = map(int, request.size.split("x"))
+            except:
+                width, height = 1024, 1024
+            
+            # Adjust steps based on model
+            is_fast = current_model_name in FAST_REPOS
+            if current_model_type == "flux2":
+                steps = 28 if request.quality == "standard" else 50  # Flux 2 recommended
+            elif current_model_name == "black-forest-labs/FLUX.1-schnell":
+                steps = 4  # Schnell is optimized for 4 steps
+            elif current_model_name == "black-forest-labs/FLUX.1-dev":
+                steps = 28 if request.quality == "standard" else 50
+            elif is_fast:
+                steps = 4 if request.quality == "standard" else 8
+            elif current_model_type == "sd3":
+                steps = 28 if request.quality == "standard" else 40
+            elif current_model_type == "sdxl":
+                steps = 30 if request.quality == "standard" else 50
+            else:
+                steps = 30
+            
+            print(f"[API] Image generation: model='{get_current_model_display_name()}' type={current_model_type} prompt='{request.prompt[:50]}...' n={request.n} size={request.size} steps={steps}")
+            
+            images, seed = generate_image_internal(
+                prompt=request.prompt,
+                negative_prompt=None,
+                num_images=min(request.n, 4),  # limit batch size
+                num_inference_steps=steps,
+                guidance_scale=7.0,
+                width=width,
+                height=height,
+                seed=-1
+            )
+            
+            # Convert images to base64
+            image_data = []
+            for img in images:
+                buffered = io.BytesIO()
+                img.save(buffered, format="PNG")
+                b64_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+                image_data.append(ImageData(b64_json=b64_str, revised_prompt=request.prompt))
+            
+            return ImageGenerationResponse(
+                created=int(time.time()),
+                data=image_data
+            )
+            
+        except Exception as e:
+            print(f"[API] Error: {e}")
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    if __name__ == '__main__':
+        # Load first available model: Flux 2, Flux 1, then SDXL
+        print('[IMG] Loading initial model...')
+        models_to_try = [
+            ("Flux.2 Dev", "Flux 2, 32B"),
+            ("Flux.1 Schnell", "Flux 1, 4 steps"),
+            ("SDXL Base 1.0", "SDXL"),
+        ]
+        for model_name, description in models_to_try:
+            print(f'[IMG] Trying: {model_name} ({description})...')
+            result = load_model(model_name)
+            if "Loaded:" in result:
+                print(f'[IMG] Loaded: {model_name}')
+                break
+            print(f'[IMG] Failed: {model_name}')
+        print('[IMG] Starting API on port 8000...')
+        uvicorn.run(api, host="0.0.0.0", port=8000, log_level="info")
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: stable-diffusion-sdxl
+  namespace: image-generation
+  labels:
+    app: stable-diffusion-sdxl
+spec:
+  selector:
+    app: stable-diffusion-sdxl
+  ports:
+    - name: api
+      port: 8000
+      targetPort: 8000
+      nodePort: 30800
+  type: NodePort
+

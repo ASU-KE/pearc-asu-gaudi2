@@ -1,0 +1,248 @@
+---
+# Llama-4-Scout-17B-16E-Instruct - Optimized for 64K context on 4 Gaudi2 HPUs
+# MoE model: 17B activated, 109B total parameters
+# Includes QKNorm fix patch and disabled temp tuning for tensor compatibility
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-llama4-scout-17b
+  namespace: aibrix-system-llm
+  labels:
+    app: vllm-llama4-scout-17b
+    model.aibrix.ai/name: llama4-scout-17b
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-llama4-scout-17b
+  template:
+    metadata:
+      labels:
+        app: vllm-llama4-scout-17b
+        model.aibrix.ai/name: llama4-scout-17b
+    spec:
+      serviceAccountName: aibrix-vllm-sa
+      runtimeClassName: habana
+      hostIPC: true
+      securityContext:
+        runAsNonRoot: false
+        runAsUser: 0
+      tolerations:
+        - key: "habana"
+          operator: "Exists"
+          effect: "NoSchedule"
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: vllm-llama4-scout-17b
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: vllm
+          image: registry.rc.asu.edu/vllm-gaudi:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/bash
+            - -c
+            - |
+              # Patch 1: Fix the sampling bug (assertion error for cached requests)
+              sed -i 's/^\([[:space:]]*\)assert sampling_metadata\.prompt_token_ids is not None/\1if sampling_metadata.prompt_token_ids is None: return logits/' \
+                /workspace/vllm/vllm/v1/sample/sampler.py || true
+              
+              # Patch 2: Fix Llama4 QKNorm reshape bug - needs to include num_heads dimension
+              # This fixes RuntimeError tensor size mismatch (256 vs 128)
+              # The container may have a partial fix that uses (-1, head_dim) but should be (-1, num_heads, head_dim)
+              # See https://github.com/vllm-project/vllm/commit/ec7da6fcf32fc05efe5d7ba30d01d3d940f12a3c
+              LLAMA4_FILE="/workspace/vllm/vllm/model_executor/models/llama4.py"
+              
+              # Fix the reshape for q - should include num_heads
+              sed -i 's/q = q\.reshape(-1, self\.head_dim)/q = q.reshape(-1, self.num_heads, self.head_dim)/g' "$LLAMA4_FILE"
+              # Fix the reshape for k - should include num_kv_heads  
+              sed -i 's/k = k\.reshape(-1, self\.head_dim)/k = k.reshape(-1, self.num_kv_heads, self.head_dim)/g' "$LLAMA4_FILE"
+              
+              # Patch 3: Disable attention temperature tuning (causes tensor shape mismatch with QKNorm)
+              # The attn_scale tensor doesn't broadcast correctly with reshaped q after QKNorm fix
+              # This may affect quality on very long contexts (>32K) but allows model to run
+              sed -i 's/if self\.attn_temperature_tuning and self\.nope:/if False and self.attn_temperature_tuning and self.nope:  # Disabled due to shape mismatch/g' "$LLAMA4_FILE"
+              
+              echo "Llama4 patches applied (QKNorm reshape + disabled temp tuning)!"
+              
+              # Start vLLM
+              exec /entrypoint.sh \
+                --model meta-llama/Llama-4-Scout-17B-16E-Instruct \
+                --host 0.0.0.0 \
+                --port 8000 \
+                --tensor-parallel-size 4 \
+                --max-model-len 65536 \
+                --max-num-seqs 8 \
+                --gpu-memory-utilization 0.75 \
+                --block-size 128 \
+                --disable-log-requests \
+                --max-num-batched-tokens 16384 \
+                --disable-log-stats \
+                --served-model-name llama4-scout-17b \
+                --trust-remote-code
+          env:
+            - name: MODEL
+              value: "meta-llama/Llama-4-Scout-17B-16E-Instruct"
+            - name: HF_HOME
+              value: "/mnt/hf_cache"
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: huggingface-token
+                  key: HUGGINGFACE_HUB_TOKEN
+            - name: HUGGINGFACE_HUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: huggingface-token
+                  key: HUGGINGFACE_HUB_TOKEN
+            - name: HPU_MEM
+              value: '{"GAUDI2": 96, "GAUDI3": 128}'
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            
+            # HPU Graph optimization - Balanced for 64K context
+            - name: VLLM_SKIP_WARMUP
+              value: "true"  # Skip warmup for faster startup
+            - name: VLLM_GRAPH_RESERVED_MEM
+              value: "0.10"   # Moderate: 10% for graphs, 90% for KV cache
+            - name: VLLM_GRAPH_PROMPT_RATIO
+              value: "0.30"   # Balanced between prefill and decode
+            - name: VLLM_GRAPH_PROMPT_STRATEGY
+              value: "max_bs"
+            - name: VLLM_GRAPH_DECODE_STRATEGY
+              value: "max_bs"
+            
+            # Bucketing optimization - Adjusted for 64K context
+            - name: VLLM_EXPONENTIAL_BUCKETING
+              value: "True"
+            
+            # Batch size buckets - Aligned with max-num-seqs: 16
+            - name: VLLM_PROMPT_BS_BUCKET_MIN
+              value: "1"
+            - name: VLLM_PROMPT_BS_BUCKET_STEP
+              value: "2"
+            - name: VLLM_PROMPT_BS_BUCKET_MAX
+              value: "8"
+            - name: VLLM_DECODE_BS_BUCKET_MIN
+              value: "1"
+            - name: VLLM_DECODE_BS_BUCKET_STEP
+              value: "2"
+            - name: VLLM_DECODE_BS_BUCKET_MAX
+              value: "8"
+            
+            # Sequence length buckets - Optimized for 64K context
+            - name: VLLM_PROMPT_SEQ_BUCKET_MIN
+              value: "128"
+            - name: VLLM_PROMPT_SEQ_BUCKET_STEP
+              value: "2048"   # ~32 buckets for 64K range
+            - name: VLLM_PROMPT_SEQ_BUCKET_MAX
+              value: "65536"  # 64K max context
+            
+            # Decode block buckets - Extended for longer sequences
+            - name: VLLM_DECODE_BLOCK_BUCKET_MIN
+              value: "128"
+            - name: VLLM_DECODE_BLOCK_BUCKET_STEP
+              value: "256"   # Appropriate for 64K context
+            - name: VLLM_DECODE_BLOCK_BUCKET_MAX
+              value: "2048"  # Extended for 64K context
+            
+            # Performance tuning
+            - name: PT_HPU_LAZY_MODE
+              value: "1"
+            - name: PT_HPU_ENABLE_LAZY_COLLECTIVES
+              value: "true"
+            
+            # Recipe cache - Persistent path for 64K config
+            - name: PT_HPU_RECIPE_CACHE_CONFIG
+              value: "/mnt/hf_cache/llama4_scout_17b_recipe_cache/,True,65536"
+            
+            - name: RUNTIME_SCALE_PATCHING
+              value: "1"
+            
+            # Additional Gaudi2 optimizations
+            - name: LOG_LEVEL_ALL
+              value: "3"      # Less verbose
+            - name: HCL_LOG_LEVEL
+              value: "5"      # Suppress HCL_FAILOVER trace spam (5=warning)
+            - name: ENABLE_CONSOLE
+              value: "true"
+            
+            # Logging - Suppress spam
+            - name: VLLM_LOGGING_LEVEL
+              value: "WARNING"
+            - name: VLLM_CONFIGURE_LOGGING
+              value: "1"
+            
+          resources:
+            requests:
+              cpu: "8"
+              memory: "128Gi"
+              habana.ai/gaudi: "4"
+              hugepages-2Mi: "8Gi"
+            limits:
+              cpu: "16"
+              memory: "192Gi"
+              habana.ai/gaudi: "4"
+              hugepages-2Mi: "8Gi"
+          ports:
+            - containerPort: 8000
+              name: serve
+          volumeMounts:
+            - name: model-cache
+              mountPath: /mnt/hf_cache
+            - name: shm
+              mountPath: /dev/shm
+            - name: habana-cache
+              mountPath: /root/.habana
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 2400   # Allow time for warmup with 64K context (40 min)
+            periodSeconds: 60
+            timeoutSeconds: 60
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 2400    # Check after warmup completes
+            periodSeconds: 180
+            timeoutSeconds: 60
+            failureThreshold: 5
+      volumes:
+        - name: model-cache
+          hostPath:
+            path: /mnt/hf_cache
+            type: DirectoryOrCreate
+        - name: habana-cache
+          hostPath:
+            path: /mnt/hf_cache/habana_cache_llama4_scout_17b
+            type: DirectoryOrCreate
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: "16Gi"
+
+---
+# Service for Llama-4-Scout-17B-16E-Instruct
+apiVersion: v1
+kind: Service
+metadata:
+  name: llama4-scout-17b
+  namespace: aibrix-system-llm
+  labels:
+    model.aibrix.ai/name: llama4-scout-17b
+spec:
+  selector:
+    app: vllm-llama4-scout-17b
+  ports:
+    - name: serve
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
