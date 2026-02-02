@@ -1,0 +1,67 @@
+# GLM-4.5 vLLM-Gaudi Container
+# Based on official vLLM-Gaudi installation instructions
+FROM vault.habana.ai/gaudi-docker/1.23.0/ubuntu24.04/habanalabs/pytorch-installer-2.9.0:latest
+
+# Set working directory
+WORKDIR /workspace
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    wget \
+    curl \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Get the last good commit for vLLM-Gaudi compatibility
+RUN git clone https://github.com/vllm-project/vllm-gaudi.git /workspace/vllm-gaudi
+WORKDIR /workspace/vllm-gaudi
+RUN export VLLM_COMMIT_HASH=$(git show "origin/vllm/last-good-commit-for-vllm-gaudi:VLLM_STABLE_COMMIT" 2>/dev/null || echo "main") && \
+    echo "Using vLLM commit: $VLLM_COMMIT_HASH" && \
+    echo "export VLLM_COMMIT_HASH=$VLLM_COMMIT_HASH" > /tmp/vllm_commit.sh
+
+# Clone and install vLLM from the compatible commit
+WORKDIR /workspace
+RUN bash -c 'source /tmp/vllm_commit.sh && \
+    git clone https://github.com/vllm-project/vllm.git /workspace/vllm && \
+    cd /workspace/vllm && \
+    git checkout $VLLM_COMMIT_HASH && \
+    sed "/^torch/d" requirements/build.txt > /tmp/build_requirements.txt && \
+    pip install -r /tmp/build_requirements.txt && \
+    VLLM_TARGET_DEVICE=empty pip install --no-build-isolation -e . && \
+    cd ..'
+
+# Install vLLM-Gaudi
+WORKDIR /workspace/vllm-gaudi
+RUN pip install -e .
+
+# # CRITICAL FIX: Patch the MLA attention .view() bug for DeepSeek models
+# # The bug is at line 354 in hpu_attn.py where .view() fails on non-contiguous tensor
+# RUN sed -i 's/output = output\.view(batch_size, -1, self\.num_heads, q\.shape\[-1\])/output = output.reshape(batch_size, -1, self.num_heads, q.shape[-1])/' \
+#     /workspace/vllm-gaudi/vllm_gaudi/attention/backends/hpu_attn.py && \
+#     echo "Patched hpu_attn.py: .view() -> .reshape()"
+
+# Upgrade Transformers to support GLM-4.5
+RUN pip install --upgrade transformers
+
+# Install fla-core for Kimi-Linear and other linear attention models
+RUN pip install -U fla-core
+
+# Verify installation
+RUN python -c "import vllm; print('vLLM version:', getattr(vllm, '__version__', 'unknown'))" && \
+    python -c "import transformers; print('Transformers version:', transformers.__version__)" && \
+    python -c "from vllm import LLM, SamplingParams; print('vLLM imports successful')" && \
+    pip show fla-core && echo "fla-core package verified"
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV VLLM_SKIP_WARMUP=false
+ENV HPU_MEM='{"GAUDI2": 96, "GAUDI3": 128}'
+
+# Create entrypoint script
+RUN echo '#!/bin/bash\n\
+echo "Kubernetes assigned HPU devices: $HABANA_VISIBLE_DEVICES"\n\
+exec python -m vllm.entrypoints.openai.api_server "$@"' > /entrypoint.sh && \
+    chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
