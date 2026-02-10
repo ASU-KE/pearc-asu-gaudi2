@@ -1,0 +1,183 @@
+{
+  "device": "cuda",
+  "timestamp": "2025-12-30T16:39:26.702637",
+  "num_runs_per_sequence": 10,
+  "single_sequence_results": [
+    {
+      "sequence_name": "short_50",
+      "sequence_length": 50,
+      "num_runs": 10,
+      "latency_mean_s": 0.903714370727539,
+      "latency_std_s": 0.034693097728583554,
+      "latency_min_s": 0.8582799434661865,
+      "latency_max_s": 0.9543209075927734,
+      "latency_median_s": 0.9200726747512817,
+      "throughput_seq_per_s": 1.1065443157609034,
+      "power_stats": {
+        "avg_watts": 115.95250000000001,
+        "max_watts": 234.36,
+        "min_watts": 88.99,
+        "readings_count": 60
+      },
+      "memory_stats": {
+        "allocated_gb": 8.466978816,
+        "reserved_gb": 8.873050112,
+        "max_allocated_gb": 8.496781824
+      }
+    },
+    {
+      "sequence_name": "short_100",
+      "sequence_length": 100,
+      "num_runs": 10,
+      "latency_mean_s": 0.9235229730606079,
+      "latency_std_s": 0.021561430155124118,
+      "latency_min_s": 0.8725621700286865,
+      "latency_max_s": 0.9475610256195068,
+      "latency_median_s": 0.9301954507827759,
+      "throughput_seq_per_s": 1.0828100969550793,
+      "power_stats": {
+        "avg_watts": 179.90140350877195,
+        "max_watts": 233.25,
+        "min_watts": 93.08,
+        "readings_count": 57
+      },
+      "memory_stats": {
+        "allocated_gb": 8.481289728,
+        "reserved_gb": 8.873050112,
+        "max_allocated_gb": 8.576372224
+      }
+    },
+    {
+      "sequence_name": "medium_200",
+      "sequence_length": 200,
+      "num_runs": 10,
+      "latency_mean_s": 2.2942705392837524,
+      "latency_std_s": 0.033550232292944696,
+      "latency_min_s": 2.2622761726379395,
+      "latency_max_s": 2.3805923461914062,
+      "latency_median_s": 2.2831162214279175,
+      "throughput_seq_per_s": 0.4358683873054438,
+      "power_stats": {
+        "avg_watts": 273.39106382978724,
+        "max_watts": 303.29,
+        "min_watts": 95.8,
+        "readings_count": 141
+      },
+      "memory_stats": {
+        "allocated_gb": 8.529205248,
+        "reserved_gb": 9.56301312,
+        "max_allocated_gb": 9.016934912
+      }
+    },
+    {
+      "sequence_name": "medium_350",
+      "sequence_length": 350,
+      "num_runs": 10,
+      "latency_mean_s": 7.012677431106567,
+      "latency_std_s": 0.011390958568944206,
+      "latency_min_s": 7.000475883483887,
+      "latency_max_s": 7.037282466888428,
+      "latency_median_s": 7.007636070251465,
+      "throughput_seq_per_s": 0.14259888748971086,
+      "power_stats": {
+        "avg_watts": 322.36318181818183,
+        "max_watts": 361.36,
+        "min_watts": 89.58,
+        "readings_count": 418
+      },
+      "memory_stats": {
+        "allocated_gb": 8.6493184,
+        "reserved_gb": 11.760828416,
+        "max_allocated_gb": 10.707455488
+      }
+    },
+    {
+      "sequence_name": "long_400",
+      "sequence_length": 400,
+      "num_runs": 10,
+      "latency_mean_s": 10.07980124950409,
+      "latency_std_s": 0.007565462794336643,
+      "latency_min_s": 10.067302942276001,
+      "latency_max_s": 10.08952021598816,
+      "latency_median_s": 10.081244468688965,
+      "throughput_seq_per_s": 0.09920830532736927,
+      "power_stats": {
+        "avg_watts": 321.45880398671096,
+        "max_watts": 365.66,
+        "min_watts": 93.79,
+        "readings_count": 602
+      },
+      "memory_stats": {
+        "allocated_gb": 8.701333504,
+        "reserved_gb": 13.811843072,
+        "max_allocated_gb": 11.642530304
+      }
+    },
+    {
+      "sequence_name": "long_500",
+      "sequence_length": 500,
+      "num_runs": 10,
+      "latency_mean_s": 15.950705623626709,
+      "latency_std_s": 0.006630321145982276,
+      "latency_min_s": 15.945222616195679,
+      "latency_max_s": 15.968981742858887,
+      "latency_median_s": 15.948618531227112,
+      "throughput_seq_per_s": 0.06269315123706924,
+      "power_stats": {
+        "avg_watts": 346.74928496319666,
+        "max_watts": 409.3,
+        "min_watts": 94.12,
+        "readings_count": 951
+      },
+      "memory_stats": {
+        "allocated_gb": 8.826180096,
+        "reserved_gb": 17.813209088,
+        "max_allocated_gb": 14.212824064
+      }
+    },
+    {
+      "sequence_name": "longest_700",
+      "sequence_length": 700,
+      "num_runs": 10,
+      "latency_mean_s": 39.00663313865662,
+      "latency_std_s": 0.060136960591860994,
+      "latency_min_s": 38.97981071472168,
+      "latency_max_s": 39.1863648891449,
+      "latency_median_s": 38.98684883117676,
+      "throughput_seq_per_s": 0.025636665344719877,
+      "power_stats": {
+        "avg_watts": 342.0789650597081,
+        "max_watts": 437.25,
+        "min_watts": 105.4,
+        "readings_count": 2261
+      },
+      "memory_stats": {
+        "allocated_gb": 9.153536,
+        "reserved_gb": 28.789702656,
+        "max_allocated_gb": 22.828176896
+      }
+    },
+    {
+      "sequence_name": "longest_1000",
+      "sequence_length": 1000,
+      "num_runs": 10,
+      "latency_mean_s": 94.7029307126999,
+      "latency_std_s": 0.018039207650088887,
+      "latency_min_s": 94.66790962219238,
+      "latency_max_s": 94.7266297340393,
+      "latency_median_s": 94.70492196083069,
+      "throughput_seq_per_s": 0.010559335307517547,
+      "power_stats": {
+        "avg_watts": 354.4639956647399,
+        "max_watts": 460.07,
+        "min_watts": 269.93,
+        "readings_count": 5536
+      },
+      "memory_stats": {
+        "allocated_gb": 9.836161024,
+        "reserved_gb": 60.792242176,
+        "max_allocated_gb": 47.311238144
+      }
+    }
+  ]
+}
