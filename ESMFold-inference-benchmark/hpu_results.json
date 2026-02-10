@@ -1,0 +1,583 @@
+{
+  "device": "hpu",
+  "timestamp": "2026-02-01T21:18:59.890149",
+  "num_runs_per_sequence": 10,
+  "single_sequence_results": [
+    {
+      "sequence_name": "short_50",
+      "sequence_length": 50,
+      "num_runs": 10,
+      "compile_time_s": 16.166394472122192,
+      "latency_with_compile_mean_s": 2.9819297313690187,
+      "latency_mean_s": 1.516989204618666,
+      "latency_std_s": 0.753862484069966,
+      "latency_min_s": 1.2470576763153076,
+      "latency_max_s": 3.649223804473877,
+      "latency_median_s": 1.2507965564727783,
+      "throughput_seq_per_s": 0.6592004721954338,
+      "power_stats": {
+        "avg_watts": 77.63636363636364,
+        "max_watts": 89.0,
+        "min_watts": 73.0,
+        "readings_count": 11
+      },
+      "memory_stats": {},
+      "graph_stats": [
+        {
+          "TotalNumber": 12,
+          "TotalTime": 30220467,
+          "AvgTime": 2518372.25
+        },
+        {
+          "TotalNumber": 14,
+          "TotalTime": 32394820,
+          "AvgTime": 2313915.714285714
+        },
+        {
+          "TotalNumber": 14,
+          "TotalTime": 32394820,
+          "AvgTime": 2313915.714285714
+        },
+        {
+          "TotalNumber": 14,
+          "TotalTime": 32394820,
+          "AvgTime": 2313915.714285714
+        },
+        {
+          "TotalNumber": 14,
+          "TotalTime": 32394820,
+          "AvgTime": 2313915.714285714
+        },
+        {
+          "TotalNumber": 14,
+          "TotalTime": 32394820,
+          "AvgTime": 2313915.714285714
+        },
+        {
+          "TotalNumber": 14,
+          "TotalTime": 32394820,
+          "AvgTime": 2313915.714285714
+        },
+        {
+          "TotalNumber": 14,
+          "TotalTime": 32394820,
+          "AvgTime": 2313915.714285714
+        },
+        {
+          "TotalNumber": 14,
+          "TotalTime": 32394820,
+          "AvgTime": 2313915.714285714
+        },
+        {
+          "TotalNumber": 14,
+          "TotalTime": 32394820,
+          "AvgTime": 2313915.714285714
+        }
+      ]
+    },
+    {
+      "sequence_name": "short_100",
+      "sequence_length": 100,
+      "num_runs": 10,
+      "compile_time_s": 1.4762206077575684,
+      "latency_with_compile_mean_s": 1.4635476112365722,
+      "latency_mean_s": 1.4621395005120172,
+      "latency_std_s": 0.002140500891482844,
+      "latency_min_s": 1.457695484161377,
+      "latency_max_s": 1.4642860889434814,
+      "latency_median_s": 1.4629395008087158,
+      "throughput_seq_per_s": 0.6839292691633161,
+      "power_stats": {
+        "avg_watts": 113.8,
+        "max_watts": 118.0,
+        "min_watts": 107.0,
+        "readings_count": 5
+      },
+      "memory_stats": {},
+      "graph_stats": [
+        {
+          "TotalNumber": 14,
+          "TotalTime": 32394820,
+          "AvgTime": 2313915.714285714
+        },
+        {
+          "TotalNumber": 14,
+          "TotalTime": 32394820,
+          "AvgTime": 2313915.714285714
+        },
+        {
+          "TotalNumber": 14,
+          "TotalTime": 32394820,
+          "AvgTime": 2313915.714285714
+        },
+        {
+          "TotalNumber": 14,
+          "TotalTime": 32394820,
+          "AvgTime": 2313915.714285714
+        },
+        {
+          "TotalNumber": 14,
+          "TotalTime": 32394820,
+          "AvgTime": 2313915.714285714
+        },
+        {
+          "TotalNumber": 14,
+          "TotalTime": 32394820,
+          "AvgTime": 2313915.714285714
+        },
+        {
+          "TotalNumber": 14,
+          "TotalTime": 32394820,
+          "AvgTime": 2313915.714285714
+        },
+        {
+          "TotalNumber": 14,
+          "TotalTime": 32394820,
+          "AvgTime": 2313915.714285714
+        },
+        {
+          "TotalNumber": 14,
+          "TotalTime": 32394820,
+          "AvgTime": 2313915.714285714
+        },
+        {
+          "TotalNumber": 14,
+          "TotalTime": 32394820,
+          "AvgTime": 2313915.714285714
+        }
+      ]
+    },
+    {
+      "sequence_name": "medium_200",
+      "sequence_length": 200,
+      "num_runs": 10,
+      "compile_time_s": 18.333182096481323,
+      "latency_with_compile_mean_s": 3.8197399377822876,
+      "latency_mean_s": 2.2071352534823947,
+      "latency_std_s": 0.781709863498346,
+      "latency_min_s": 1.9045467376708984,
+      "latency_max_s": 4.4135870933532715,
+      "latency_median_s": 1.9116637706756592,
+      "throughput_seq_per_s": 0.4530759945147043,
+      "power_stats": {
+        "avg_watts": 150.46153846153845,
+        "max_watts": 327.0,
+        "min_watts": 74.0,
+        "readings_count": 13
+      },
+      "memory_stats": {},
+      "graph_stats": [
+        {
+          "TotalNumber": 19,
+          "TotalTime": 47478628,
+          "AvgTime": 2498875.1578947366
+        },
+        {
+          "TotalNumber": 21,
+          "TotalTime": 49784302,
+          "AvgTime": 2370681.0476190476
+        },
+        {
+          "TotalNumber": 21,
+          "TotalTime": 49784302,
+          "AvgTime": 2370681.0476190476
+        },
+        {
+          "TotalNumber": 21,
+          "TotalTime": 49784302,
+          "AvgTime": 2370681.0476190476
+        },
+        {
+          "TotalNumber": 21,
+          "TotalTime": 49784302,
+          "AvgTime": 2370681.0476190476
+        },
+        {
+          "TotalNumber": 21,
+          "TotalTime": 49784302,
+          "AvgTime": 2370681.0476190476
+        },
+        {
+          "TotalNumber": 21,
+          "TotalTime": 49784302,
+          "AvgTime": 2370681.0476190476
+        },
+        {
+          "TotalNumber": 21,
+          "TotalTime": 49784302,
+          "AvgTime": 2370681.0476190476
+        },
+        {
+          "TotalNumber": 21,
+          "TotalTime": 49784302,
+          "AvgTime": 2370681.0476190476
+        },
+        {
+          "TotalNumber": 21,
+          "TotalTime": 49784302,
+          "AvgTime": 2370681.0476190476
+        }
+      ]
+    },
+    {
+      "sequence_name": "medium_350",
+      "sequence_length": 350,
+      "num_runs": 10,
+      "compile_time_s": 20.76707673072815,
+      "latency_with_compile_mean_s": 5.219792628288269,
+      "latency_mean_s": 3.49231661690606,
+      "latency_std_s": 1.0865575232049294,
+      "latency_min_s": 3.1074893474578857,
+      "latency_max_s": 6.5655646324157715,
+      "latency_median_s": 3.107788562774658,
+      "throughput_seq_per_s": 0.2863428805850735,
+      "power_stats": {
+        "avg_watts": 199.77777777777777,
+        "max_watts": 383.0,
+        "min_watts": 74.0,
+        "readings_count": 18
+      },
+      "memory_stats": {},
+      "graph_stats": [
+        {
+          "TotalNumber": 26,
+          "TotalTime": 66721012,
+          "AvgTime": 2566192.769230769
+        },
+        {
+          "TotalNumber": 27,
+          "TotalTime": 69649955,
+          "AvgTime": 2579627.962962963
+        },
+        {
+          "TotalNumber": 27,
+          "TotalTime": 69649955,
+          "AvgTime": 2579627.962962963
+        },
+        {
+          "TotalNumber": 27,
+          "TotalTime": 69649955,
+          "AvgTime": 2579627.962962963
+        },
+        {
+          "TotalNumber": 27,
+          "TotalTime": 69649955,
+          "AvgTime": 2579627.962962963
+        },
+        {
+          "TotalNumber": 27,
+          "TotalTime": 69649955,
+          "AvgTime": 2579627.962962963
+        },
+        {
+          "TotalNumber": 27,
+          "TotalTime": 69649955,
+          "AvgTime": 2579627.962962963
+        },
+        {
+          "TotalNumber": 27,
+          "TotalTime": 69649955,
+          "AvgTime": 2579627.962962963
+        },
+        {
+          "TotalNumber": 27,
+          "TotalTime": 69649955,
+          "AvgTime": 2579627.962962963
+        },
+        {
+          "TotalNumber": 27,
+          "TotalTime": 69649955,
+          "AvgTime": 2579627.962962963
+        }
+      ]
+    },
+    {
+      "sequence_name": "long_400",
+      "sequence_length": 400,
+      "num_runs": 10,
+      "compile_time_s": 21.550175189971924,
+      "latency_with_compile_mean_s": 6.044968938827514,
+      "latency_mean_s": 4.322168244255914,
+      "latency_std_s": 1.0558773340458045,
+      "latency_min_s": 3.9469363689422607,
+      "latency_max_s": 7.30863881111145,
+      "latency_median_s": 3.9493134021759033,
+      "throughput_seq_per_s": 0.23136535726691865,
+      "power_stats": {
+        "avg_watts": 190.0,
+        "max_watts": 336.0,
+        "min_watts": 73.0,
+        "readings_count": 21
+      },
+      "memory_stats": {},
+      "graph_stats": [
+        {
+          "TotalNumber": 32,
+          "TotalTime": 87137537,
+          "AvgTime": 2723048.03125
+        },
+        {
+          "TotalNumber": 33,
+          "TotalTime": 89995357,
+          "AvgTime": 2727132.0303030303
+        },
+        {
+          "TotalNumber": 33,
+          "TotalTime": 89995357,
+          "AvgTime": 2727132.0303030303
+        },
+        {
+          "TotalNumber": 33,
+          "TotalTime": 89995357,
+          "AvgTime": 2727132.0303030303
+        },
+        {
+          "TotalNumber": 33,
+          "TotalTime": 89995357,
+          "AvgTime": 2727132.0303030303
+        },
+        {
+          "TotalNumber": 33,
+          "TotalTime": 89995357,
+          "AvgTime": 2727132.0303030303
+        },
+        {
+          "TotalNumber": 33,
+          "TotalTime": 89995357,
+          "AvgTime": 2727132.0303030303
+        },
+        {
+          "TotalNumber": 33,
+          "TotalTime": 89995357,
+          "AvgTime": 2727132.0303030303
+        },
+        {
+          "TotalNumber": 33,
+          "TotalTime": 89995357,
+          "AvgTime": 2727132.0303030303
+        },
+        {
+          "TotalNumber": 33,
+          "TotalTime": 89995357,
+          "AvgTime": 2727132.0303030303
+        }
+      ]
+    },
+    {
+      "sequence_name": "long_500",
+      "sequence_length": 500,
+      "num_runs": 10,
+      "compile_time_s": 23.214407205581665,
+      "latency_with_compile_mean_s": 8.663146615028381,
+      "latency_mean_s": 7.046339882744683,
+      "latency_std_s": 1.142819399764242,
+      "latency_min_s": 6.640184640884399,
+      "latency_max_s": 10.278719663619995,
+      "latency_median_s": 6.642646551132202,
+      "throughput_seq_per_s": 0.14191765038879744,
+      "power_stats": {
+        "avg_watts": 234.53333333333333,
+        "max_watts": 339.0,
+        "min_watts": 73.0,
+        "readings_count": 30
+      },
+      "memory_stats": {},
+      "graph_stats": [
+        {
+          "TotalNumber": 38,
+          "TotalTime": 108852795,
+          "AvgTime": 2864547.236842105
+        },
+        {
+          "TotalNumber": 40,
+          "TotalTime": 112039804,
+          "AvgTime": 2800995.1
+        },
+        {
+          "TotalNumber": 40,
+          "TotalTime": 112039804,
+          "AvgTime": 2800995.1
+        },
+        {
+          "TotalNumber": 40,
+          "TotalTime": 112039804,
+          "AvgTime": 2800995.1
+        },
+        {
+          "TotalNumber": 40,
+          "TotalTime": 112039804,
+          "AvgTime": 2800995.1
+        },
+        {
+          "TotalNumber": 40,
+          "TotalTime": 112039804,
+          "AvgTime": 2800995.1
+        },
+        {
+          "TotalNumber": 40,
+          "TotalTime": 112039804,
+          "AvgTime": 2800995.1
+        },
+        {
+          "TotalNumber": 40,
+          "TotalTime": 112039804,
+          "AvgTime": 2800995.1
+        },
+        {
+          "TotalNumber": 40,
+          "TotalTime": 112039804,
+          "AvgTime": 2800995.1
+        },
+        {
+          "TotalNumber": 40,
+          "TotalTime": 112039804,
+          "AvgTime": 2800995.1
+        }
+      ]
+    },
+    {
+      "sequence_name": "longest_700",
+      "sequence_length": 700,
+      "num_runs": 10,
+      "compile_time_s": 29.815725564956665,
+      "latency_with_compile_mean_s": 17.36446602344513,
+      "latency_mean_s": 15.980992741054958,
+      "latency_std_s": 1.4842523540322454,
+      "latency_min_s": 15.437718629837036,
+      "latency_max_s": 20.178956270217896,
+      "latency_median_s": 15.455797672271729,
+      "throughput_seq_per_s": 0.06257433541228094,
+      "power_stats": {
+        "avg_watts": 274.06779661016947,
+        "max_watts": 360.0,
+        "min_watts": 72.0,
+        "readings_count": 59
+      },
+      "memory_stats": {},
+      "graph_stats": [
+        {
+          "TotalNumber": 45,
+          "TotalTime": 134518907,
+          "AvgTime": 2989309.0444444446
+        },
+        {
+          "TotalNumber": 46,
+          "TotalTime": 138672996,
+          "AvgTime": 3014630.347826087
+        },
+        {
+          "TotalNumber": 46,
+          "TotalTime": 138672996,
+          "AvgTime": 3014630.347826087
+        },
+        {
+          "TotalNumber": 46,
+          "TotalTime": 138672996,
+          "AvgTime": 3014630.347826087
+        },
+        {
+          "TotalNumber": 46,
+          "TotalTime": 138672996,
+          "AvgTime": 3014630.347826087
+        },
+        {
+          "TotalNumber": 46,
+          "TotalTime": 138672996,
+          "AvgTime": 3014630.347826087
+        },
+        {
+          "TotalNumber": 46,
+          "TotalTime": 138672996,
+          "AvgTime": 3014630.347826087
+        },
+        {
+          "TotalNumber": 46,
+          "TotalTime": 138672996,
+          "AvgTime": 3014630.347826087
+        },
+        {
+          "TotalNumber": 46,
+          "TotalTime": 138672996,
+          "AvgTime": 3014630.347826087
+        },
+        {
+          "TotalNumber": 46,
+          "TotalTime": 138672996,
+          "AvgTime": 3014630.347826087
+        }
+      ]
+    },
+    {
+      "sequence_name": "longest_1000",
+      "sequence_length": 1000,
+      "num_runs": 10,
+      "compile_time_s": 50.70173692703247,
+      "latency_with_compile_mean_s": 40.52639212608337,
+      "latency_mean_s": 39.39579825931125,
+      "latency_std_s": 1.9945378157484697,
+      "latency_min_s": 38.66605019569397,
+      "latency_max_s": 45.036903858184814,
+      "latency_median_s": 38.687499046325684,
+      "throughput_seq_per_s": 0.02538341762788494,
+      "power_stats": {
+        "avg_watts": 284.45255474452557,
+        "max_watts": 401.0,
+        "min_watts": 72.0,
+        "readings_count": 137
+      },
+      "memory_stats": {},
+      "graph_stats": [
+        {
+          "TotalNumber": 51,
+          "TotalTime": 169440754,
+          "AvgTime": 3322367.725490196
+        },
+        {
+          "TotalNumber": 52,
+          "TotalTime": 175213737,
+          "AvgTime": 3369494.9423076925
+        },
+        {
+          "TotalNumber": 52,
+          "TotalTime": 175213737,
+          "AvgTime": 3369494.9423076925
+        },
+        {
+          "TotalNumber": 52,
+          "TotalTime": 175213737,
+          "AvgTime": 3369494.9423076925
+        },
+        {
+          "TotalNumber": 52,
+          "TotalTime": 175213737,
+          "AvgTime": 3369494.9423076925
+        },
+        {
+          "TotalNumber": 52,
+          "TotalTime": 175213737,
+          "AvgTime": 3369494.9423076925
+        },
+        {
+          "TotalNumber": 52,
+          "TotalTime": 175213737,
+          "AvgTime": 3369494.9423076925
+        },
+        {
+          "TotalNumber": 52,
+          "TotalTime": 175213737,
+          "AvgTime": 3369494.9423076925
+        },
+        {
+          "TotalNumber": 52,
+          "TotalTime": 175213737,
+          "AvgTime": 3369494.9423076925
+        },
+        {
+          "TotalNumber": 52,
+          "TotalTime": 175213737,
+          "AvgTime": 3369494.9423076925
+        }
+      ]
+    }
+  ]
+}
