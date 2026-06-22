@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=bench-a100
-#SBATCH --output=/scratch/username/gaudi_bench/bench_results/a100/logs/a100_%j.out
-#SBATCH --error=/scratch/username/gaudi_bench/bench_results/a100/logs/a100_%j.err
+#SBATCH --output=/scratch/tianche5/gaudi_bench/bench_results/a100/logs/a100_%j.out
+#SBATCH --error=/scratch/tianche5/gaudi_bench/bench_results/a100/logs/a100_%j.err
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
@@ -16,7 +16,7 @@
 set -eo pipefail
 
 DEVICE="a100"
-BENCH_ROOT="/scratch/username/gaudi_bench"
+BENCH_ROOT="/scratch/tianche5/gaudi_bench"
 OUTROOT="${BENCH_ROOT}/bench_results"
 DEVDIR="${OUTROOT}/${DEVICE}"
 LOGDIR="${DEVDIR}/logs"
@@ -31,9 +31,9 @@ WARMUP_RUNS=2
 # ---- environment -----------------------------------------------------------
 module purge
 ml mamba
-source activate /scratch/username/gaudi_bench/env/a100
+source activate /scratch/tianche5/gaudi_bench/env/a100
 
-export HF_HOME="/scratch/username/huggingface"
+export HF_HOME="/scratch/tianche5/huggingface"
 export CUDA_VISIBLE_DEVICES=0
 if [ -f "${HF_HOME}/token" ]; then
   export HUGGINGFACE_HUB_TOKEN="$(< "${HF_HOME}/token")"

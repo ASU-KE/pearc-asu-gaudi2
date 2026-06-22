@@ -1,21 +1,22 @@
 #!/bin/bash
-#SBATCH --job-name=bench-gaudi2
-#SBATCH --output=/scratch/tianche5/gaudi_bench/bench_results/gaudi2/logs/gaudi2_%j.out
-#SBATCH --error=/scratch/tianche5/gaudi_bench/bench_results/gaudi2/logs/gaudi2_%j.err
+#SBATCH --job-name=bench-h100
+#SBATCH --output=/scratch/tianche5/gaudi_bench/bench_results/h100/logs/h100_%j.out
+#SBATCH --error=/scratch/tianche5/gaudi_bench/bench_results/h100/logs/h100_%j.err
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --exclusive
-#SBATCH -p gaudi
-#SBATCH -G 1
-#SBATCH --time=04:00:00
+#SBATCH -G h100:1
+#SBATCH --time=00:10:00
+#SBATCH -p general
+#SBATCH -q private
 
 # ============================================================
-#  Gaudi2 HPU  —  Llama-3-8B FP8 benchmark
+#  H100 GPU  —  Llama-3-8B BF16 benchmark
 # ============================================================
 set -eo pipefail
 
-DEVICE="gaudi2"
+DEVICE="h100"
 BENCH_ROOT="/scratch/tianche5/gaudi_bench"
 OUTROOT="${BENCH_ROOT}/bench_results"
 DEVDIR="${OUTROOT}/${DEVICE}"
@@ -31,17 +32,13 @@ WARMUP_RUNS=2
 # ---- environment -----------------------------------------------------------
 module purge
 ml mamba
-source activate gaudi
+source activate pytorch-bench
 
 export HF_HOME="/scratch/tianche5/huggingface"
+export CUDA_VISIBLE_DEVICES=0
 if [ -f "${HF_HOME}/token" ]; then
   export HUGGINGFACE_HUB_TOKEN="$(< "${HF_HOME}/token")"
 fi
-
-# absolute paths to the optimum-habana example directory
-HABANA_DIR="/home/tianche5/gaudi2/optimum-habana/examples/text-generation"
-export QUANT_CONFIG="./quantization_config/maxabs_quant.json"
-export PT_HPU_LAZY_MODE=1
 
 # ---- CSV header (written once) ---------------------------------------------
 RESULTS_CSV="${DEVDIR}/results.csv"
@@ -50,22 +47,6 @@ if [ ! -f "${RESULTS_CSV}" ]; then
     > "${RESULTS_CSV}"
 fi
 
-# ---- cd into the habana dir so all relative paths resolve ------------------
-# run_generation.py + neural_compressor expect hqt_output/, .graph_dumps/,
-# and quantization_config/ relative to CWD.
-cd "${HABANA_DIR}"
-
-GEN_CMD_BASE=(
-  python run_generation.py
-  --model_name_or_path "$MODEL"
-  --use_hpu_graphs
-  --use_kv_cache
-  --trim_logits
-  --reuse_cache
-  --bf16
-  --trust_remote_code
-)
-
 # ---- warmup + measured loops ------------------------------------------------
 for seq in "${SEQ_LIST[@]}"; do
   for bs in "${BATCH_LIST[@]}"; do
@@ -73,7 +54,9 @@ for seq in "${SEQ_LIST[@]}"; do
     # --- warmup (not recorded) ---
     for w in $(seq 1 $WARMUP_RUNS); do
       echo "  warmup  seq=${seq} bs=${bs} [${w}/${WARMUP_RUNS}]"
-      "${GEN_CMD_BASE[@]}" --max_new_tokens "$seq" --batch_size "$bs" \
+      python "${BENCH_ROOT}/cuda_benchmark.py" \
+        --model_name_or_path "$MODEL" --bf16 --trust_remote_code \
+        --max_new_tokens "$seq" --batch_size "$bs" \
         > "${LOGDIR}/warm_s${seq}_b${bs}_w${w}.log" 2>&1 || true
       sleep 1
     done
@@ -86,16 +69,19 @@ for seq in "${SEQ_LIST[@]}"; do
       echo "▶ measured  seq=${seq} bs=${bs} run=${run_idx}"
 
       wall_start=$SECONDS
-      "${GEN_CMD_BASE[@]}" --max_new_tokens "$seq" --batch_size "$bs" \
+      python "${BENCH_ROOT}/cuda_benchmark.py" \
+        --model_name_or_path "$MODEL" --bf16 --trust_remote_code \
+        --max_new_tokens "$seq" --batch_size "$bs" \
         > "$logfile" 2>&1 || echo "⚠ run failed – see $logfile"
       wall_time=$(( SECONDS - wall_start ))
 
       python "${BENCH_ROOT}/parse_log.py" \
-        "$logfile" "$DEVICE" "$stamp" "$seq" "$bs" "$run_id" "$wall_time" "$RESULTS_CSV"
+        "$logfile" "$DEVICE" "$stamp" "$seq" "$bs" "$run_id" "$wall_time" "$RESULTS_CSV" \
+        || echo "⚠ parse failed for $run_id"
 
       sleep 1
     done
   done
 done
 
-echo "✓ Gaudi2 job ${SLURM_JOB_ID} done.  CSV → ${RESULTS_CSV}"
+echo "✓ H100 job ${SLURM_JOB_ID} done.  CSV → ${RESULTS_CSV}"

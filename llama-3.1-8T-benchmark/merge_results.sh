@@ -5,7 +5,7 @@
 # ============================================================
 set -eo pipefail
 
-BENCH_ROOT="/scratch/username/gaudi_bench"
+BENCH_ROOT="/scratch/tianche5/gaudi_bench"
 OUTROOT="${BENCH_ROOT}/bench_results"
 MERGED="${OUTROOT}/merged.csv"
 

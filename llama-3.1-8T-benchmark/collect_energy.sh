@@ -7,7 +7,7 @@
 set -eo pipefail
 
 # Path to merged CSV (adjust if different)
-BENCH_ROOT="/scratch/username/gaudi_bench"
+BENCH_ROOT="/scratch/tianche5/gaudi_bench"
 MERGED="${BENCH_ROOT}/bench_results/merged.csv"
 
 if [ ! -f "${MERGED}" ]; then
