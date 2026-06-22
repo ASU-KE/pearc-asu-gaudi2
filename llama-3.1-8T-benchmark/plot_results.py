@@ -25,10 +25,10 @@ import matplotlib.ticker as ticker
 
 # device → colour + marker;  precision → linestyle
 DEVICE_STYLE = {
-    "gaudi2": {"color": "#2563EB", "marker": "s"},
-    "a100":   {"color": "#EAB308", "marker": "^"},
-    "h100":   {"color": "#16A34A", "marker": "o"},
-    "gh200":  {"color": "#DC2626", "marker": "D"},
+    "gaudi2": {"color": "#EA4335", "marker": "s"},  # Google Red
+    "a100":   {"color": "#FBBC05", "marker": "^"},  # Google Yellow
+    "h100":   {"color": "#34A853", "marker": "o"},  # Google Green
+    "gh200":  {"color": "#4285F4", "marker": "D"},  # Google Blue (unused in 8B-only runs)
 }
 PRECISION_STYLE = {"bf16": "-", "fp8": "--"}
 DEVICE_LABEL = {"gaudi2": "Gaudi2", "a100": "A100", "h100": "H100", "gh200": "GH200"}
