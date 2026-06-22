@@ -9,6 +9,7 @@
 #SBATCH --time=04:00:00
 #SBATCH -p general
 #SBATCH -q private
+#SBATCH --exclusive
 
 # ============================================================
 #  H100 — vLLM Llama-3.1-8B (BF16 + FP8), single card.

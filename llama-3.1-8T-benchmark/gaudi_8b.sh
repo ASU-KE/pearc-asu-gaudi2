@@ -8,6 +8,7 @@
 #SBATCH -p gaudi
 #SBATCH -G 1
 #SBATCH --time=04:00:00
+#SBATCH --exclusive
 
 # ============================================================
 #  Gaudi2 HPU — vLLM Llama-3.1-8B (BF16 + FP8), single card.

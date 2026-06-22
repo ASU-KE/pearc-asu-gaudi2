@@ -8,6 +8,7 @@
 #SBATCH -G a100:1
 #SBATCH --time=04:00:00
 #SBATCH -p htc
+#SBATCH --exclusive
 
 # ============================================================
 #  A100 — vLLM Llama-3.1-8B (BF16 only), single card.

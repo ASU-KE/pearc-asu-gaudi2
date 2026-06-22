@@ -10,6 +10,7 @@
 # Set partition/GRES to your GH200 nodes (e.g. -p gh, --gres=gpu:gh200:1).
 # GH200 is ARM (aarch64): use an aarch64 vLLM env/image, not the x86 one.
 #SBATCH -p general
+#SBATCH --exclusive
 
 # ============================================================
 #  GH200 — vLLM Llama-3.1-8B (BF16 + FP8), single card.
