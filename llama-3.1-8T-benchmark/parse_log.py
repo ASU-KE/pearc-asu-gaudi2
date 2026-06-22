@@ -1,58 +1,76 @@
 #!/usr/bin/env python3
 """
-parse_log.py — Parse a benchmark log file and append one CSV row.
-Called by all three sbatch scripts (gaudi2 / a100 / h100).
+parse_log.py — Parse one benchmark log (run_vllm_cuda.py / run_vllm_gaudi.py)
+and append one CSV row. Called by bench_common.sh for every device.
 
 Usage:
     python parse_log.py <logfile> <device> <timestamp> <seq_len> \
                         <batch_size> <run_id> <wall_time_s> <csv_path>
+
+<seq_len> is the output length and <batch_size> the concurrency passed to the
+driver; everything else (model, precision, tp, latencies, power, energy) is read
+out of the log so the row is self-describing.
 """
 
-import os, sys, re, csv
+import os
+import sys
+import re
+import csv
 
-logpath   = sys.argv[1]
-device    = sys.argv[2]
-stamp     = sys.argv[3]
-seq       = sys.argv[4]
-bs        = sys.argv[5]
-run_id    = sys.argv[6]
-wall_s    = sys.argv[7]
-csv_path  = sys.argv[8]
-jobid     = os.environ.get("SLURM_JOB_ID", "")
+logpath, device, stamp, seq, bs, run_id, wall_s, csv_path = sys.argv[1:9]
+jobid = os.environ.get("SLURM_JOB_ID", "")
 
 text = open(logpath, "r", errors="ignore").read()
 
+NUM = r"([0-9]+(?:\.[0-9]+)?)"
 
-def grab(pattern):
+
+def fnum(pattern):
     m = re.search(pattern, text, re.M)
     return float(m.group(1)) if m else ""
 
 
-metrics = {
-    "throughput":      grab(r"Throughput.*?=\s*([0-9]+\.[0-9]+)"),
-    "first_token_ms":  grab(r"Average first token latency\s*=\s*([0-9]+\.[0-9]+)"),
-    "rest_token_ms":   grab(r"Average rest token latency\s*=\s*([0-9]+\.[0-9]+)"),
-    "end2end_ms":      grab(r"Average end to end latency\s*=\s*([0-9]+\.[0-9]+)"),
-    "mem_alloc_gb":    grab(r"Memory allocated\s*=\s*([0-9]+\.[0-9]+)\s*GB"),
-    "mem_max_gb":      grab(r"Max memory allocated\s*=\s*([0-9]+\.[0-9]+)\s*GB"),
-    "total_mem_gb":    grab(r"Total memory available\s*=\s*([0-9]+\.[0-9]+)\s*GB"),
-    "graph_compile_s": grab(r"Graph compilation duration\s*=\s*([0-9]+\.[0-9]+)"),
+def fstr(pattern):
+    m = re.search(pattern, text, re.M)
+    return m.group(1).strip() if m else ""
+
+
+row = {
+    "device": device,
+    "model": fstr(r"^Model\s*=\s*(.+)$"),
+    "precision": fstr(r"^Precision\s*=\s*(\w+)"),
+    "vllm_version": fstr(r"^vLLM version\s*=\s*(.+)$"),
+    "timestamp": stamp,
+    "seq_len": seq,
+    "batch_size": bs,
+    "input_len": fnum(r"Input length\s*=\s*" + NUM),
+    "tp_size": fnum(r"Tensor parallel size\s*=\s*" + NUM),
+    "cpu_offload_gb": fnum(r"CPU offload\s*=\s*" + NUM + r"\s*GB"),
+    "run_id": run_id,
+    "slurm_jobid": jobid,
+    "wall_time_s": wall_s,
+    "throughput": fnum(r"Throughput \(output tokens\)\s*=\s*" + NUM),
+    "throughput_std": fnum(r"Throughput std\s*=\s*" + NUM),
+    "first_token_ms": fnum(r"Average first token latency\s*=\s*" + NUM),
+    "rest_token_ms": fnum(r"Average rest token latency\s*=\s*" + NUM),
+    "end2end_ms": fnum(r"Average end to end latency\s*=\s*" + NUM),
+    "mem_alloc_gb": fnum(r"Memory allocated\s*=\s*" + NUM + r"\s*GB"),
+    "mem_max_gb": fnum(r"Max memory allocated\s*=\s*" + NUM + r"\s*GB"),
+    "total_mem_gb": fnum(r"Total memory available\s*=\s*" + NUM + r"\s*GB"),
+    "graph_compile_s": fnum(r"Graph compilation duration\s*=\s*" + NUM),
+    "avg_power_w": fnum(r"Average power\s*=\s*" + NUM + r"\s*W"),
+    "energy_j_est": fnum(r"Total energy\s*=\s*" + NUM + r"\s*J"),
+    "energy_per_token": fnum(r"Energy per token\s*=\s*" + NUM + r"\s*J"),
+    "logfile": logpath,
 }
 
-row = [
-    device, stamp, seq, bs, run_id, jobid, wall_s,
-    metrics["throughput"],
-    metrics["first_token_ms"],
-    metrics["rest_token_ms"],
-    metrics["end2end_ms"],
-    metrics["mem_alloc_gb"],
-    metrics["mem_max_gb"],
-    metrics["total_mem_gb"],
-    metrics["graph_compile_s"],
-    logpath,
-]
+header = list(row.keys())
+write_header = not os.path.exists(csv_path) or os.path.getsize(csv_path) == 0
+with open(csv_path, "a", newline="") as fh:
+    w = csv.DictWriter(fh, fieldnames=header)
+    if write_header:
+        w.writeheader()
+    w.writerow(row)
 
-with open(csv_path, "a") as fh:
-    csv.writer(fh).writerow(row)
-
-print(f"APPENDED  {run_id}  thr={metrics['throughput']}  e2e={metrics['end2end_ms']}")
+print(f"APPENDED  {run_id}  thr={row['throughput']}  e2e={row['end2end_ms']}  "
+      f"J/tok={row['energy_per_token']}")
