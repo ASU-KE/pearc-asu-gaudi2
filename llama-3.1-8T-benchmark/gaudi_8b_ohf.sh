@@ -37,7 +37,7 @@ BATCH_LIST=(1 8 32 64 128)
 REPEATS=3
 WARMUP_RUNS=2                  # internal optimum-habana warmup per measured child
 
-MAMBA_ENV="${MAMBA_ENV:-gaudi}"
+MAMBA_ENV="${MAMBA_ENV:-gaudi-1.24.0}"
 DRIVER="${BENCH_ROOT}/run_optimum_gaudi.py"
 
 # Optimum-Habana text-generation example (has run_generation.py + gaudi_spawn.py
