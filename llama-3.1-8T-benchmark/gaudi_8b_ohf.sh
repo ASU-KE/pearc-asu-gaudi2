@@ -55,13 +55,16 @@ export QUANT_CONFIG_FP8="${BENCH_ROOT}/quantization_config/maxabs_quant.json"
 
 module purge; ml mamba; source activate "${MAMBA_ENV}"
 
+# Slurm inherits PYTHONPATH=/etc/python from the submit env. That dir ships a
+# sitecustomize.py which replaces builtins.__import__ with a wrapper that breaks
+# transformers' lazy-module loading (ImportError: cannot import name
+# 'PreTrainedModel'). The editable optimum-habana install needs nothing on
+# PYTHONPATH, so clear it — matches the clean interactive `unset PYTHONPATH`.
+unset PYTHONPATH
+
 # --- env preflight -----------------------------------------------------------
 # Prove THIS job's interpreter is the one that has optimum-habana installed, and
-# fail in seconds (not after model download + init) if it isn't. The recurring
-# failure mode is a mixed env: a stray PYTHONPATH (Slurm exports the submit env)
-# puts another site-packages ahead of the editable install, so `python` finds
-# transformers but NOT the editable optimum.habana .pth (site.py only runs .pth
-# for the interpreter's own site-packages, never for PYTHONPATH dirs).
+# fail in seconds (not after model download + init) if it isn't.
 echo "=== ENV PREFLIGHT ==="
 echo "which python : $(command -v python)"
 python -c "import sys; print('sys.prefix  :', sys.prefix)"
