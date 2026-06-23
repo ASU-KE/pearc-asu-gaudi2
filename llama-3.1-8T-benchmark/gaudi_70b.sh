@@ -34,9 +34,10 @@ BATCH_LIST=(1 8 32)            # add 64 if you want one more load point
 REPEATS=3
 WARMUP_RUNS=1
 
+RUN_BACKEND=apptainer
 RUN_BACKEND="${RUN_BACKEND:-mamba}"
 MAMBA_ENV="${MAMBA_ENV:-gaudi}"
-APPTAINER_SIF="${APPTAINER_SIF:-/scratch/tianche5/sif/vllm-gaudi.sif}"
+APPTAINER_SIF="${APPTAINER_SIF:-/packages/apps/simg/vllm-gaudi-1.24.0-1007.sif}"
 DRIVER="${BENCH_ROOT}/run_vllm_gaudi.py"
 
 export HF_HOME="/scratch/tianche5/huggingface"
