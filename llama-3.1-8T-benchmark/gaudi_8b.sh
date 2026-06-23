@@ -54,8 +54,16 @@ fi
 
 launch_one () {
   if [ "${RUN_BACKEND}" = "apptainer" ]; then
+    # Bind whatever HPU device nodes this node actually exposes. SynapseAI 1.24
+    # uses the kernel accel subsystem (/dev/accel/*); older stacks use /dev/hl*.
+    # HABANA_VISIBLE_MODULES (set per-run) still selects which card vLLM uses.
+    local dev_binds=() d
+    [ -d /dev/accel ] && dev_binds+=( --bind /dev/accel )
+    for d in /dev/hl[0-9]* /dev/hl_controlD*; do
+      [ -e "$d" ] && dev_binds+=( --bind "$d:$d" )
+    done
     apptainer exec \
-      --bind /dev/hl0:/dev/hl0 \
+      "${dev_binds[@]}" \
       --bind /usr/lib/habanalabs:/usr/lib/habanalabs \
       --bind /sys:/sys \
       --env HF_HOME="${HF_HOME}" \

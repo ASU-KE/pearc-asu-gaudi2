@@ -8,7 +8,7 @@
 #SBATCH -G h100:1
 #SBATCH --time=04:00:00
 #SBATCH -p general
-#SBATCH -q private
+#SBATCH -q grp_ereille1
 #SBATCH --exclusive
 # --exclusive reserves the whole node (no co-tenant jobs). bench_common.sh then
 # pins CUDA_VISIBLE_DEVICES to the first <tp> GPU(s) per run, so vLLM and the
