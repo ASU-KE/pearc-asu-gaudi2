@@ -38,28 +38,18 @@ BATCH_LIST=(1 8 32)
 REPEATS=3
 WARMUP_RUNS=1
 
-RUN_BACKEND=apptainer
-MAMBA_ENV="${MAMBA_ENV:-vllm-cuda-arm}"
 APPTAINER_SIF="${APPTAINER_SIF:-/packages/aarch64/simg/vllm-26.05.post1-py3.sif}"
 DRIVER="${BENCH_ROOT}/run_vllm_cuda.py"
 
 export HF_HOME="/scratch/tianche5/huggingface"
 [ -f "${HF_HOME}/token" ] && export HUGGINGFACE_HUB_TOKEN="$(< "${HF_HOME}/token")"
 
-if [ "${RUN_BACKEND}" = "mamba" ]; then
-  module purge; ml mamba; source activate "${MAMBA_ENV}"
-fi
-
 launch_one () {
-  if [ "${RUN_BACKEND}" = "apptainer" ]; then
-    apptainer exec --nv \
-      --env HF_HOME="${HF_HOME}" \
-      --env HUGGINGFACE_HUB_TOKEN="${HUGGINGFACE_HUB_TOKEN}" \
-      --env CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES}" \
-      "${APPTAINER_SIF}" python3 "${DRIVER}" "$@"
-  else
-    python "${DRIVER}" "$@"
-  fi
+  apptainer exec --nv \
+    --env HF_HOME="${HF_HOME}" \
+    --env HUGGINGFACE_HUB_TOKEN="${HUGGINGFACE_HUB_TOKEN}" \
+    --env CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES}" \
+    "${APPTAINER_SIF}" python3 "${DRIVER}" "$@"
 }
 
 source "${BENCH_ROOT}/bench_common.sh"

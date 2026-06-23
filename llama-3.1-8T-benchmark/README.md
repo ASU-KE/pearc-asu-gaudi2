@@ -68,6 +68,10 @@ bash merge_results.sh "$BENCH_ROOT"     # picks up bench_results/gaudi2-ohf/ too
 python plot_results_ohf.py "$BENCH_ROOT/bench_results/merged.csv"
 ```
 
+`run_optimum_gaudi.py` auto-adds `$(dirname $(dirname $OHF_TEXTGEN_DIR))` to
+`PYTHONPATH` when it detects an Optimum-Habana source checkout, so a source tree
+works even if `optimum-habana` was not installed with `pip install -e`.
+
 FP8 here uses the **same** INC measurement prerequisite as the vLLM path, but the
 `hqt_output/` must exist under `OHF_TEXTGEN_DIR` (run the measurement pass with
 `run_generation.py --fp8 QUANT_CONFIG=…/maxabs_measure.json` from that dir first).

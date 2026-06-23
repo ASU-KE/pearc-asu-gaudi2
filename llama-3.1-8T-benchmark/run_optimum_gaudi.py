@@ -33,7 +33,9 @@ throughput so it stays consistent with the vLLM definition.
 Environment
 -----------
   OHF_TEXTGEN_DIR  path to optimum-habana/examples/text-generation (has
-                   run_generation.py). REQUIRED.
+                   run_generation.py). REQUIRED. If this points to a source
+                   checkout, the driver auto-adds the checkout root to
+                   PYTHONPATH so optimum.habana can be imported.
   OHF_SPAWN        path to optimum-habana/examples/gaudi_spawn.py (multi-card,
                    only needed when --tensor-parallel-size > 1). Defaults to
                    ../gaudi_spawn.py relative to OHF_TEXTGEN_DIR.
@@ -44,6 +46,7 @@ Environment
 
 import argparse
 import contextlib
+import importlib
 import os
 import re
 import shutil
@@ -54,11 +57,49 @@ import threading
 import time
 
 ENGINE_VERSION = "optimum-habana"
-try:  # record the exact OHF version for provenance (goes in the vllm_version col)
-    import optimum.habana as _oh  # noqa: F401
-    ENGINE_VERSION = f"optimum-habana {getattr(_oh, '__version__', '?')}"
-except Exception:
-    pass
+
+
+def _prepend_env_path(var_name, path):
+    cur = os.environ.get(var_name, "")
+    parts = [p for p in cur.split(os.pathsep) if p]
+    if path in parts:
+        return
+    os.environ[var_name] = path if not cur else f"{path}{os.pathsep}{cur}"
+
+
+def _ensure_optimum_habana_importable(textgen):
+    """Ensure optimum.habana resolves in this process and in child launches."""
+    repo_root = os.path.abspath(os.path.join(textgen, os.pardir, os.pardir))
+    pkg_init = os.path.join(repo_root, "optimum", "habana", "__init__.py")
+    if os.path.isfile(pkg_init):
+        _prepend_env_path("PYTHONPATH", repo_root)
+        if repo_root not in sys.path:
+            sys.path.insert(0, repo_root)
+    try:
+        oh = importlib.import_module("optimum.habana")
+        return f"optimum-habana {getattr(oh, '__version__', '?')}"
+    except ModuleNotFoundError as exc:
+        if exc.name not in {"optimum", "optimum.habana"}:
+            raise
+        if os.path.isfile(pkg_init):
+            hint = (
+                f"Detected source checkout root: {repo_root}\n"
+                "Try one of:\n"
+                f"  export PYTHONPATH={repo_root}:$PYTHONPATH\n"
+                f"  pip install -e {repo_root}\n"
+            )
+        else:
+            hint = (
+                "OHF_TEXTGEN_DIR does not look like an optimum-habana checkout.\n"
+                "Point OHF_TEXTGEN_DIR to "
+                ".../optimum-habana/examples/text-generation\n"
+                "or activate an environment where optimum-habana is installed.\n"
+            )
+        raise SystemExit(
+            "Cannot import optimum.habana required by run_generation.py.\n"
+            f"OHF_TEXTGEN_DIR={textgen}\n"
+            f"{hint}"
+        ) from exc
 
 
 class HlSmiPowerSampler:
@@ -135,6 +176,8 @@ def build_command(args):
     gen_py = os.path.join(textgen, "run_generation.py")
     if not os.path.isfile(gen_py):
         raise SystemExit(f"run_generation.py not found at {gen_py}")
+    global ENGINE_VERSION
+    ENGINE_VERSION = _ensure_optimum_habana_importable(textgen)
 
     gen = [
         gen_py,
@@ -215,6 +258,9 @@ def main():
     p.add_argument("--cpu-offload-gb", type=float, default=0)  # parity; ignored
     args = p.parse_args()
 
+    cmd = build_command(args)
+    cwd = os.environ.get("OHF_TEXTGEN_DIR")       # so hqt_output/ etc. resolve
+
     print(f"vLLM version = {ENGINE_VERSION}")     # provenance (engine, not vLLM)
     print(f"Device = {args.device_label}")
     print(f"Model = {args.model}")
@@ -225,9 +271,6 @@ def main():
     print(f"Output length = {args.output_len}")
     print(f"Batch size = {args.batch_size}")
     sys.stdout.flush()
-
-    cmd = build_command(args)
-    cwd = os.environ.get("OHF_TEXTGEN_DIR")       # so hqt_output/ etc. resolve
 
     throughputs, graph_s_first = [], None
     mem_max = mem_alloc = mem_total = None
