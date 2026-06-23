@@ -29,12 +29,37 @@ run_sweep () {
   local entry mlabel mid mtp prec out bs run_id logfile stamp wall_start wall_time
   local offload extra
 
+  # Capture the full set of accelerators Slurm exposed (with --exclusive this is
+  # every GPU/HPU on the node) so each run can be restricted to just the first
+  # $tp of them — vLLM and the power sampler then use/measure exactly the
+  # intended devices while --exclusive still keeps co-tenant jobs off the node.
+  local slurm_cvd="${CUDA_VISIBLE_DEVICES:-}"
+  local slurm_hvm="${HABANA_VISIBLE_MODULES:-}"
+
+  # huggingface_hub's get_token() auto-reads HF_TOKEN, NOT HUGGINGFACE_HUB_TOKEN,
+  # so a gated download runs anonymously (401) unless HF_TOKEN is set. Mirror the
+  # token to HF_TOKEN for the mamba path and inject it into every apptainer
+  # container via APPTAINERENV_/SINGULARITYENV_ (works regardless of --env flags).
+  if [ -n "${HF_TOKEN:-${HUGGINGFACE_HUB_TOKEN:-}}" ]; then
+    export HF_TOKEN="${HF_TOKEN:-$HUGGINGFACE_HUB_TOKEN}"
+    export APPTAINERENV_HF_TOKEN="${HF_TOKEN}"
+    export SINGULARITYENV_HF_TOKEN="${HF_TOKEN}"
+  fi
+
   # parse_log.py owns the CSV header (writes it on the first append).
   for entry in "${RUNS[@]}"; do
     IFS=':' read -r mlabel mid prec mtp offload <<< "${entry}"
     extra=()
     if [ -n "${offload}" ] && [ "${offload}" != "0" ]; then
       extra+=(--cpu-offload-gb "${offload}")    # CUDA driver only (GH200)
+    fi
+
+    # restrict this run to exactly $mtp devices (first $mtp of the node)
+    if [ -n "${slurm_cvd}" ]; then
+      export CUDA_VISIBLE_DEVICES="$(printf '%s' "${slurm_cvd}" | tr ',' '\n' | head -n "${mtp}" | paste -sd, -)"
+    fi
+    if [ -n "${slurm_hvm}" ]; then
+      export HABANA_VISIBLE_MODULES="$(printf '%s' "${slurm_hvm}" | tr ',' '\n' | head -n "${mtp}" | paste -sd, -)"
     fi
     for out in "${OUT_LIST[@]}"; do
       for bs in "${BATCH_LIST[@]}"; do

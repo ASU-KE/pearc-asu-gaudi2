@@ -11,6 +11,9 @@
 # GH200 is ARM (aarch64): use an aarch64 vLLM env/image, not the x86 one.
 #SBATCH -p general
 #SBATCH --exclusive
+# --exclusive reserves the whole node (no co-tenant jobs). bench_common.sh then
+# pins CUDA_VISIBLE_DEVICES to the first <tp> GPU(s) per run, so vLLM and the
+# power sampler use/measure exactly the intended card(s), not the idle remainder.
 
 # ============================================================
 #  GH200 — vLLM Llama-3.1-8B (BF16 + FP8), single card.

@@ -177,6 +177,11 @@ def main():
     print(f"Input length = {args.input_len}")
     print(f"Output length = {args.output_len}")
     print(f"Batch size = {args.batch_size}")
+    print(f"Power-sampled GPUs = {gpu_indices}")
+    if not args.no_power and len(gpu_indices) != args.tensor_parallel_size:
+        print(f"WARNING: power sampling {len(gpu_indices)} GPU(s) but tp="
+              f"{args.tensor_parallel_size}; energy may include idle GPUs. "
+              f"Pin CUDA_VISIBLE_DEVICES to the {args.tensor_parallel_size} card(s) in use.")
 
     compile_start = time.perf_counter()
     llm = build_engine(args)

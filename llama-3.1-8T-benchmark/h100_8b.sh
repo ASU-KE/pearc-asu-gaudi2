@@ -10,6 +10,9 @@
 #SBATCH -p general
 #SBATCH -q private
 #SBATCH --exclusive
+# --exclusive reserves the whole node (no co-tenant jobs). bench_common.sh then
+# pins CUDA_VISIBLE_DEVICES to the first <tp> GPU(s) per run, so vLLM and the
+# power sampler use/measure exactly the intended card(s), not the idle remainder.
 
 # ============================================================
 #  H100 — vLLM Llama-3.1-8B (BF16 + FP8), single card.
