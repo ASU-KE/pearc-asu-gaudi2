@@ -42,7 +42,7 @@ DRIVER="${BENCH_ROOT}/run_optimum_gaudi.py"
 
 # Optimum-Habana text-generation example (has run_generation.py + gaudi_spawn.py
 # one level up). Override if your checkout lives elsewhere.
-export OHF_TEXTGEN_DIR="${OHF_TEXTGEN_DIR:-/scratch/tianche5/gaudi2/optimum-habana/examples/text-generation}"
+export OHF_TEXTGEN_DIR="${OHF_TEXTGEN_DIR:-/home/tianche5/optimum-habana/examples/text-generation}"
 
 export HF_HOME="/scratch/tianche5/huggingface"
 [ -f "${HF_HOME}/token" ] && export HUGGINGFACE_HUB_TOKEN="$(< "${HF_HOME}/token")"

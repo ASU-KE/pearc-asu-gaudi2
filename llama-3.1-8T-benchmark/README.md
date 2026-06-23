@@ -59,7 +59,8 @@ series** (`device = gaudi2-ohf`) at the same workload shape as the vLLM sweep, s
 lazy-vs-compile lines up point-for-point.
 
 ```bash
-# needs the mamba `gaudi` env (lazy-capable torch fork) + an optimum-habana checkout
+# needs the SynapseAI-1.24-matched mamba env (`gaudi-1.24.0`; lazy verified) +
+# optimum-habana installed into it (see below)
 export OHF_TEXTGEN_DIR=/path/to/optimum-habana/examples/text-generation
 sbatch gaudi_8b_ohf.sh         # 8B BF16 + FP8, single card
 sbatch gaudi_70b_ohf.sh        # 70B BF16 (tp=2 via gaudi_spawn/DeepSpeed) + FP8
@@ -91,6 +92,30 @@ QUANT_CONFIG=…/quantization_config/maxabs_measure.json \
 TTFT/ITL are blank for this series (`run_generation.py` reports aggregate
 throughput, not a prefill/decode split), so those two panels omit it; throughput
 also has no error bar (one aggregate figure over `--n_iterations`).
+
+### Changes from the original Feb baseline (`gaudi_bench.sh`)
+
+`run_optimum_gaudi.py` keeps the Feb lazy + HPU-graphs invocation
+(`--use_hpu_graphs --use_kv_cache --trim_logits --reuse_cache --bf16
+--trust_remote_code`, `PT_HPU_LAZY_MODE=1`) but differs as follows:
+
+| Aspect | Feb `gaudi_bench.sh` | Now |
+|---|---|---|
+| Model | `Meta-Llama-3-8B` (base) | `Meta-Llama-3.1-8B-Instruct` |
+| Input length | uncontrolled (default prompt) | `--max_input_tokens 512` |
+| Output length | swept `--max_new_tokens` ∈ {128, 512, 2048} | fixed `--max_new_tokens 256` |
+| Batch | {1, 8, 32, 128} | {1, 8, 32, 64, 128} |
+| Repeats | 3 separate processes (cold init each); run_generation defaults warmup=3/n_iters=5 | 1 process, `--warmup 2 --n_iterations 3` (graphs compiled once) |
+| Precision | one config, `--bf16` **with `QUANT_CONFIG` exported globally** | explicit `bf16` (no `QUANT_CONFIG`) **and** `fp8` (`QUANT_CONFIG` set) |
+
+**Important — the old "BF16" was probably FP8.** Feb exported
+`QUANT_CONFIG=…/maxabs_quant.json` for *every* run while passing `--bf16`.
+`run_generation.py` activates INC quantization whenever `QUANT_CONFIG` is in the
+environment, so those Feb runs were almost certainly **INC-FP8**, not pure BF16
+(provided a measurement pass had populated `hqt_output/`). The new track sets
+`QUANT_CONFIG` **only** for the `fp8` precision, so its `bf16` series is genuinely
+BF16 and is expected to be slower than the Feb "bf16" numbers — that gap is the
+quantization effect, now reported explicitly rather than hidden in the baseline.
 
 ## Precision per platform
 
