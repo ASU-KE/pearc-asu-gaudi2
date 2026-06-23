@@ -55,6 +55,22 @@ export QUANT_CONFIG_FP8="${BENCH_ROOT}/quantization_config/maxabs_quant.json"
 
 module purge; ml mamba; source activate "${MAMBA_ENV}"
 
+# --- env preflight -----------------------------------------------------------
+# Prove THIS job's interpreter is the one that has optimum-habana installed, and
+# fail in seconds (not after model download + init) if it isn't. The recurring
+# failure mode is a mixed env: a stray PYTHONPATH (Slurm exports the submit env)
+# puts another site-packages ahead of the editable install, so `python` finds
+# transformers but NOT the editable optimum.habana .pth (site.py only runs .pth
+# for the interpreter's own site-packages, never for PYTHONPATH dirs).
+echo "=== ENV PREFLIGHT ==="
+echo "which python : $(command -v python)"
+python -c "import sys; print('sys.prefix  :', sys.prefix)"
+echo "PYTHONPATH   : ${PYTHONPATH:-<unset>}"
+pip show optimum-habana 2>/dev/null | grep -iE '^(Version|Location|Editable)' || echo "pip: optimum-habana NOT registered in this env"
+python -c "import optimum.habana as oh; print('optimum.habana:', oh.__file__, oh.__version__)" \
+  || { echo "FATAL: optimum.habana not importable in ${MAMBA_ENV}; aborting before sweep."; exit 1; }
+echo "=== END PREFLIGHT ==="
+
 launch_one () {
   python "${DRIVER}" "$@"
 }
