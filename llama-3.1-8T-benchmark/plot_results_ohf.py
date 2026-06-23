@@ -52,8 +52,12 @@ def main():
                            f"memory_{model}.pdf", outdir, logy=False)
         base.metric_panels(df, model, "energy_per_token", "Energy per token (J)",
                            f"energy_{model}.pdf", outdir, logy=True)
+        # Prefer the lazy-mode Gaudi2 run as the speedup baseline; fall back to
+        # the compile run when no lazy-mode data is present.
+        has_lazy = ((df.model_label == model) & (df.device == "gaudi2-ohf")).any()
+        baseline = "gaudi2-ohf" if has_lazy else "gaudi2"
         for prec in ("bf16", "fp8"):
-            base.speedup_panels(df, model, prec, outdir)
+            base.speedup_panels(df, model, prec, outdir, baseline=baseline)
 
     print(f"All OHF-overlay plots saved → {outdir}")
 

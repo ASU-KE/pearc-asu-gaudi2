@@ -42,12 +42,12 @@ DRIVER="${BENCH_ROOT}/run_optimum_gaudi.py"
 
 # Optimum-Habana text-generation example (has run_generation.py + gaudi_spawn.py
 # one level up). Override if your checkout lives elsewhere.
-export OHF_TEXTGEN_DIR="${OHF_TEXTGEN_DIR:-/home/tianche5/optimum-habana/examples/text-generation}"
+export OHF_TEXTGEN_DIR="${OHF_TEXTGEN_DIR:-/scratch/tianche5/gaudi2/optimum-habana/examples/text-generation}"
 
 export HF_HOME="/scratch/tianche5/huggingface"
 [ -f "${HF_HOME}/token" ] && export HUGGINGFACE_HUB_TOKEN="$(< "${HF_HOME}/token")"
-# The classic Habana stack (mamba env `gaudi`) ships the lazy-capable torch fork,
-# so the Feb path runs in lazy mode + HPU graphs (set by the driver's flags).
+# Env `gaudi-1.24.0` has the SynapseAI-1.24-matched Habana torch (lazy still works,
+# verified). The driver requests lazy mode + HPU graphs via run_generation.py flags.
 export PT_HPU_LAZY_MODE=1
 # FP8 (INC): calibrated maxabs config. Requires a prior measurement pass that
 # wrote hqt_output/ under OHF_TEXTGEN_DIR (see README → "FP8 calibration").

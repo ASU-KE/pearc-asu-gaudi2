@@ -54,7 +54,6 @@ import statistics
 import subprocess
 import sys
 import threading
-import time
 
 ENGINE_VERSION = "optimum-habana"
 
@@ -68,38 +67,49 @@ def _prepend_env_path(var_name, path):
 
 
 def _ensure_optimum_habana_importable(textgen):
-    """Ensure optimum.habana resolves in this process and in child launches."""
+    """Return an engine-version string, importing optimum.habana.
+
+    Prefer a properly installed package: a clean import resolves both
+    optimum.habana AND the base `optimum` namespace (configuration_utils, etc.).
+    Only if that fails do we add the source checkout to the path as a last
+    resort — a bare checkout root on sys.path SHADOWS the installed base
+    `optimum` (it ships only optimum/habana/), which breaks imports like
+    optimum.configuration_utils. So we never inject when a real install works.
+    """
     repo_root = os.path.abspath(os.path.join(textgen, os.pardir, os.pardir))
     pkg_init = os.path.join(repo_root, "optimum", "habana", "__init__.py")
-    if os.path.isfile(pkg_init):
-        _prepend_env_path("PYTHONPATH", repo_root)
-        if repo_root not in sys.path:
-            sys.path.insert(0, repo_root)
-    try:
+
+    def _do_import():
         oh = importlib.import_module("optimum.habana")
         return f"optimum-habana {getattr(oh, '__version__', '?')}"
-    except ModuleNotFoundError as exc:
-        if exc.name not in {"optimum", "optimum.habana"}:
-            raise
-        if os.path.isfile(pkg_init):
-            hint = (
-                f"Detected source checkout root: {repo_root}\n"
-                "Try one of:\n"
-                f"  export PYTHONPATH={repo_root}:$PYTHONPATH\n"
-                f"  pip install -e {repo_root}\n"
-            )
-        else:
-            hint = (
-                "OHF_TEXTGEN_DIR does not look like an optimum-habana checkout.\n"
-                "Point OHF_TEXTGEN_DIR to "
-                ".../optimum-habana/examples/text-generation\n"
-                "or activate an environment where optimum-habana is installed.\n"
-            )
-        raise SystemExit(
-            "Cannot import optimum.habana required by run_generation.py.\n"
-            f"OHF_TEXTGEN_DIR={textgen}\n"
-            f"{hint}"
-        ) from exc
+
+    # 1) clean import from the active environment (the correct path).
+    try:
+        return _do_import()
+    except ModuleNotFoundError:
+        pass
+
+    # 2) fallback: source checkout on the path (best-effort; only helps if its
+    #    deps — base optimum, transformers — are already installed).
+    if os.path.isfile(pkg_init) and repo_root not in sys.path:
+        _prepend_env_path("PYTHONPATH", repo_root)
+        sys.path.insert(0, repo_root)
+        try:
+            return _do_import()
+        except ModuleNotFoundError:
+            pass
+
+    hint = (f"  pip install -e {repo_root}\n" if os.path.isfile(pkg_init)
+            else "  point OHF_TEXTGEN_DIR at .../optimum-habana/examples/"
+                 "text-generation,\n  or activate an env where optimum-habana "
+                 "is installed.\n")
+    raise SystemExit(
+        "Cannot import optimum.habana (or its base `optimum` dependency).\n"
+        "Install optimum-habana INTO the active env — a bare source checkout on\n"
+        "PYTHONPATH shadows the base `optimum` package and breaks imports such as\n"
+        "optimum.configuration_utils. Recommended:\n"
+        f"{hint}"
+        f"OHF_TEXTGEN_DIR={textgen}\n")
 
 
 class HlSmiPowerSampler:
@@ -179,6 +189,8 @@ def build_command(args):
     global ENGINE_VERSION
     ENGINE_VERSION = _ensure_optimum_habana_importable(textgen)
 
+    # One process does warmup + all measured iterations (graphs compile once);
+    # restarting per repeat would re-pay the multi-minute init/compile each time.
     gen = [
         gen_py,
         "--model_name_or_path", args.model,
@@ -186,7 +198,8 @@ def build_command(args):
         "--max_input_tokens", str(args.input_len),
         "--max_new_tokens", str(args.output_len),
         "--warmup", str(max(args.warmup_iters, 1)),
-        "--n_iterations", "1",          # one measured pass per child; we repeat
+        "--n_iterations", str(max(args.num_iters, 1)),
+        "--bf16",                       # base compute dtype (FP8 layers on via INC)
         "--use_hpu_graphs",
         "--use_kv_cache",
         "--trim_logits",
@@ -200,10 +213,9 @@ def build_command(args):
                 "FP8 on Gaudi needs QUANT_CONFIG_FP8 (or QUANT_CONFIG) set to a "
                 "maxabs config AND a prior INC measurement pass. See README: "
                 "'FP8 calibration on Gaudi'.")
-        os.environ["QUANT_CONFIG"] = cfg     # INC reads this at load time
-        gen += ["--fp8"]
-    else:
-        gen += ["--bf16"]
+        # This optimum-habana build has NO --fp8 flag: INC quantizes to FP8 from
+        # the bf16 run purely off the QUANT_CONFIG env var (child inherits it).
+        os.environ["QUANT_CONFIG"] = cfg
 
     if args.tensor_parallel_size > 1:
         spawn = os.environ.get(
@@ -272,32 +284,19 @@ def main():
     print(f"Batch size = {args.batch_size}")
     sys.stdout.flush()
 
-    throughputs, graph_s_first = [], None
-    mem_max = mem_alloc = mem_total = None
     sampler_cm = (contextlib.nullcontext() if args.no_power
                   else HlSmiPowerSampler(args.power_interval_ms,
                                          args.tensor_parallel_size))
-    compile_start = time.perf_counter()
     with sampler_cm as sampler:
-        for i in range(args.num_iters):
-            r = run_child(cmd, cwd)
-            throughputs.append(r["throughput"])
-            if graph_s_first is None:
-                graph_s_first = r["graph_s"]      # first child pays compilation
-            for k, dst in (("mem_max", "mem_max"), ("mem_alloc", "mem_alloc"),
-                           ("mem_total", "mem_total")):
-                if r[k] is not None:
-                    if k == "mem_max":
-                        mem_max = max(mem_max or 0, r[k])
-                    elif k == "mem_alloc":
-                        mem_alloc = max(mem_alloc or 0, r[k])
-                    else:
-                        mem_total = r[k]
-    if graph_s_first is not None:
-        print(f"Graph compilation duration = {graph_s_first:.2f} s")
+        r = run_child(cmd, cwd)               # warmup + all measured iters in one go
+    mem_max, mem_alloc, mem_total = r["mem_max"], r["mem_alloc"], r["mem_total"]
+    if r["graph_s"] is not None:
+        print(f"Graph compilation duration = {r['graph_s']:.2f} s")
 
-    thr_med = statistics.median(throughputs)
-    thr_std = statistics.stdev(throughputs) if len(throughputs) > 1 else 0.0
+    thr_med = r["throughput"]
+    # run_generation.py reports one aggregate throughput over --n_iterations, so
+    # there is no per-iteration spread to report (the OHF series has no error bar).
+    thr_std = 0.0
     # end-to-end latency for the batch, consistent with the vLLM driver's
     # definition (wall to generate output_len tokens for the whole batch).
     e2e_ms = (args.batch_size * args.output_len) / max(thr_med, 1e-9) * 1000.0

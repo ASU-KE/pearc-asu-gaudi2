@@ -68,15 +68,29 @@ bash merge_results.sh "$BENCH_ROOT"     # picks up bench_results/gaudi2-ohf/ too
 python plot_results_ohf.py "$BENCH_ROOT/bench_results/merged.csv"
 ```
 
-`run_optimum_gaudi.py` auto-adds `$(dirname $(dirname $OHF_TEXTGEN_DIR))` to
-`PYTHONPATH` when it detects an Optimum-Habana source checkout, so a source tree
-works even if `optimum-habana` was not installed with `pip install -e`.
+`optimum-habana` must be **installed into the active env** (`pip install -e
+/path/to/optimum-habana`) — that pulls the base `optimum` package + matching
+`transformers`. A bare source checkout on `PYTHONPATH` does **not** work: it
+ships only `optimum/habana/` and shadows the base `optimum` namespace, breaking
+imports like `optimum.configuration_utils`. The driver imports the installed
+package first and only falls back to the checkout path as a last resort.
 
-FP8 here uses the **same** INC measurement prerequisite as the vLLM path, but the
-`hqt_output/` must exist under `OHF_TEXTGEN_DIR` (run the measurement pass with
-`run_generation.py --fp8 QUANT_CONFIG=…/maxabs_measure.json` from that dir first).
+FP8 here has **no `--fp8` flag** — this optimum-habana build drives INC purely off
+the `QUANT_CONFIG` env var (the model still runs `--bf16`; INC quantizes on top).
+Run the measurement pass **through `run_generation.py`** (not the vLLM driver — the
+layer-name mapping differs) from `OHF_TEXTGEN_DIR`, so its `hqt_output/` lands there:
+
+```bash
+cd "$OHF_TEXTGEN_DIR"
+QUANT_CONFIG=…/quantization_config/maxabs_measure.json \
+  python run_generation.py --model_name_or_path NousResearch/Meta-Llama-3.1-8B-Instruct \
+    --bf16 --use_hpu_graphs --use_kv_cache --batch_size 1 --max_new_tokens 32
+# benchmark runs then read maxabs_quant.json via QUANT_CONFIG_FP8 (wired in the sbatch)
+```
+
 TTFT/ITL are blank for this series (`run_generation.py` reports aggregate
-throughput, not a prefill/decode split), so those two panels omit it.
+throughput, not a prefill/decode split), so those two panels omit it; throughput
+also has no error bar (one aggregate figure over `--n_iterations`).
 
 ## Precision per platform
 

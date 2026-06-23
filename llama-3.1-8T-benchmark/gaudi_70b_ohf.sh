@@ -38,10 +38,10 @@ WARMUP_RUNS=2                  # internal optimum-habana warmup per measured chi
 MAMBA_ENV="${MAMBA_ENV:-gaudi-1.24.0}"
 DRIVER="${BENCH_ROOT}/run_optimum_gaudi.py"
 
-export OHF_TEXTGEN_DIR="${OHF_TEXTGEN_DIR:-/home/tianche5/optimum-habana/examples/text-generation}"
+export OHF_TEXTGEN_DIR="${OHF_TEXTGEN_DIR:-/scratch/tianche5/gaudi2/optimum-habana/examples/text-generation}"
 # gaudi_spawn.py (DeepSpeed launcher) for the tp=2 BF16 run; defaults to one
 # level up from OHF_TEXTGEN_DIR. Override if your layout differs.
-export OHF_SPAWN="${OHF_SPAWN:-/home/tianche5/optimum-habana/examples/gaudi_spawn.py}"
+export OHF_SPAWN="${OHF_SPAWN:-/scratch/tianche5/gaudi2/optimum-habana/examples/gaudi_spawn.py}"
 
 export HF_HOME="/scratch/tianche5/huggingface"
 [ -f "${HF_HOME}/token" ] && export HUGGINGFACE_HUB_TOKEN="$(< "${HF_HOME}/token")"
