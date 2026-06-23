@@ -1,88 +1,60 @@
 \subsubsection{Large Language Model}
 % Nil
-The Llama-3.1-8B-Instruct model \cite{llama3.1-8b}—the instruction-tuned
-8-billion-parameter variant of Meta’s Llama~3.1 family, released in July~2024—was
-selected to benchmark large language model (LLM) inference performance across a
-single NVIDIA A100 GPU, a single Intel Gaudi2 HPU, a single NVIDIA H100 GPU, and a
-single NVIDIA GH200 Grace Hopper Superchip. It is an open-weight model with a
-128K-token context window that demonstrates strong performance across reasoning,
-coding, and multilingual tasks. With 8~billion parameters, the model is
-sufficiently large to stress accelerator memory bandwidth and compute resources
-while remaining small enough to run on a single device on every platform, enabling
-direct, controlled hardware comparisons free of tensor-parallel or interconnect
-confounds.
+We benchmark LLM inference using Llama-3.1-8B-Instruct \cite{llama3.1-8b}, the
+instruction-tuned 8B variant of Meta's Llama~3.1 family (July~2024), across a
+single NVIDIA A100, a single Intel Gaudi2 HPU, a single NVIDIA H100, and a single
+NVIDIA GH200 Grace Hopper Superchip. At 8~billion parameters it is large enough to
+stress accelerator memory bandwidth and compute, yet small enough to run on one
+device on every platform, enabling controlled hardware comparisons free of
+tensor-parallel or interconnect confounds. It is also an established accelerator
+benchmark, used as a Gaudi2 baseline by Intel \cite{intel2024gaudi2} and in the
+MLPerf Training suite \cite{mlcommons}.
 
-The Llama~3.1 8B model has been adopted by Intel as a baseline for evaluating
-Gaudi2 platforms \cite{intel2024gaudi2}, and was selected by MLCommons as a large
-language model pretraining benchmark in the MLPerf Training suite \cite{mlcommons}.
-Because MLPerf Training measures pretraining, it uses the base
-(non-instruction-tuned) checkpoint; since this study targets inference serving, we
-benchmark the instruction-tuned variant, \texttt{Llama-3.1-8B-Instruct}, which
-shares the same architecture and parameter count. This makes it a representative
-and well-established workload for accelerator evaluation.
+The serving engine differs by platform, and we control for this confound rather
+than eliminate it: each platform runs a well-supported software path whose exact
+framework and version are recorded per run. The three NVIDIA platforms use vLLM on
+its CUDA backend over the PyTorch release matching the installed CUDA toolkit
+\cite{pytorch}. The vLLM Habana extension could not be brought up reliably on our
+stack, so Gaudi2 instead uses Intel's Optimum-Habana inference stack in lazy mode
+with HPU graphs—the vendor-preferred high-performance path. Graph capture and
+compilation occur in a warmup phase excluded from timing on every platform, so
+compilation latency is never counted as inference. vLLM separates prefill (time to
+first token) from decode (inter-token latency), whereas Optimum-Habana reports a
+single aggregate throughput; Gaudi2 therefore contributes to the throughput and
+energy comparisons but not to the latency-decomposition (TTFT/ITL) results.
 
-The benchmarking pipeline uses vLLM as the serving engine on the three NVIDIA
-platforms (A100, H100, and GH200), where it runs on its CUDA backend over the
-PyTorch release matching the installed CUDA toolkit \cite{pytorch}. On Gaudi2, the
-vLLM Habana extension could not be brought up reliably on our software stack, so
-Gaudi2 is instead benchmarked through Intel's Optimum-Habana inference stack in
-lazy mode with HPU graphs—the default, vendor-preferred high-performance inference
-path for Gaudi2. The serving engine therefore differs between the NVIDIA platforms
-and Gaudi2; rather than eliminating the framework confound we control for it,
-running each platform through a well-supported software path and recording the
-exact framework and version for every run. Graph capture and compilation are
-performed during a warmup phase that is excluded from timing on every platform, so
-compilation latency is never counted as inference. On the NVIDIA platforms vLLM
-additionally measures the prefill phase (time to first token) separately from
-decode (inter-token latency); the Optimum-Habana path reports a single aggregate
-throughput rather than a prefill/decode split, so Gaudi2 contributes to the
-throughput and energy comparisons but not to the latency-decomposition (TTFT/ITL)
-results.
+Precision is treated as an independently controlled variable so hardware and
+numerical-format effects are never conflated. Every platform is benchmarked in
+BF16, giving a like-for-like comparison that isolates raw hardware performance. The
+three platforms with native FP8 tensor hardware—Gaudi2, H100, and GH200 (whose
+Hopper GPU shares the H100's FP8 datapath)—are additionally benchmarked in FP8
+(E4M3). The A100 (Ampere) lacks native FP8 tensor cores and, rather than using an
+emulated non-comparable path, appears only in the BF16 comparison. Because Gaudi2
+is reported in both BF16 and FP8, the throughput and energy benefit of quantization
+is shown explicitly rather than mistaken for a hardware difference.
 
-Precision is treated as a first-class, independently controlled variable so that
-hardware and numerical-format effects are never conflated. Every platform is
-benchmarked in BF16, giving a like-for-like BF16-vs-BF16 comparison that isolates
-raw hardware performance at identical precision. The three platforms with native
-FP8 tensor hardware—Gaudi2, H100, and GH200 (whose Hopper-architecture GPU shares
-the H100's FP8 datapath)—are additionally benchmarked in FP8 (E4M3), giving a
-like-for-like FP8-vs-FP8 comparison that isolates the 8-bit datapath. The A100
-(Ampere) has no native FP8 tensor cores; rather than introducing an emulated,
-non-comparable path, it is reported only in BF16 and therefore appears solely in
-the BF16 comparison. Critically, Gaudi2 is reported in both BF16 and FP8, so the
-throughput and energy benefit attributable to quantization is shown explicitly
-rather than being mistaken for a hardware difference.
+The two FP8 paths differ by backend. On Gaudi2, FP8 is produced through the Intel
+Neural Compressor (INC): a one-time calibration pass records each linear layer's
+maximum absolute activation per tensor and postprocesses these into per-tensor FP8
+scaling factors, mapping each tensor independently to avoid overflow or precision
+loss given FP8's narrow dynamic range. During inference, linear-layer weights and
+activations are cast to FP8 (E4M3) and the matrix multiplications run in FP8 (W8A8)
+on the Gaudi2 MME, with an FP8 KV cache; the LM head and non-linear operations
+remain in BF16. On the NVIDIA Hopper platforms (H100 and GH200), vLLM applies FP8
+online and dynamically from the BF16 checkpoint with an FP8 KV cache, requiring no
+calibration step or quantized artifact. In every configuration the KV-cache
+precision matches the compute precision—FP8 for FP8 runs, BF16 for BF16 runs—so
+both comparisons remain like-for-like.
 
-The two FP8 paths differ by backend and are documented separately. On Gaudi2, FP8
-is produced through the Intel Neural Compressor (INC). A one-time calibration pass
-instruments each linear layer and records the maximum absolute activation observed
-per tensor. These statistics are then postprocessed into per-tensor FP8 scaling
-factors. This step is required because FP8 has a much narrower dynamic range than
-BF16, so each tensor must be mapped independently to avoid numerical overflow or
-excessive precision loss. During quantized inference, both the weights and the
-activations of the linear layers are cast to FP8 (E4M3) and the matrix
-multiplications execute in FP8 (W8A8) on the Gaudi2 matrix-multiplication engine
-(MME), together with an FP8 KV cache; the language-model head and the non-linear
-operations remain in BF16. On the NVIDIA Hopper platforms (H100 and GH200), FP8 is
-instead applied online and dynamically by vLLM directly from the BF16 checkpoint,
-together with an FP8 KV cache, requiring no separate calibration step or quantized
-model artifact. In every configuration the KV-cache precision matches the compute
-precision—an FP8 KV cache for the FP8 runs on Gaudi2, H100, and GH200, and a BF16
-KV cache for all BF16 runs—so the FP8-vs-FP8 and BF16-vs-BF16 comparisons remain
-like-for-like; within FP8 the only backend difference is the quantization method
-described above.
-
-All experiments use a fixed workload shape of 512 input tokens and 256 output
-tokens, with request concurrency swept over 1, 8, 32, 64, and~128 to trace each
-platform from the latency-bound regime to its throughput-saturation knee. For every
-configuration, an initial warmup pass is discarded before measurement. On the
-NVIDIA (vLLM) platforms each configuration is then repeated three times and we
-report the median together with run-to-run variability rather than a single-shot
-average, whereas the Optimum-Habana path on Gaudi2 reports throughput aggregated
-over its own repeated iterations within a single process. Token throughput and peak
-accelerator memory are recorded on every platform; time to first token (TTFT),
-inter-token latency or time per output token (ITL/TPOT), and end-to-end latency are
-recorded on the NVIDIA platforms, where vLLM exposes the prefill/decode split.
-Board power is sampled live during execution via \texttt{nvidia-smi} on the GPUs
-and \texttt{hl-smi} on Gaudi2 and integrated into an energy-per-token metric; each
-job is allocated so that it sees only its own accelerator, ensuring that no
-co-located workload contributes to the sampled board power.
+All experiments use a fixed workload of 512 input and 256 output tokens, with
+request concurrency swept over 1, 8, 32, 64, and~128 to trace each platform from
+the latency-bound regime to its throughput-saturation knee. An initial warmup pass
+is discarded before measurement. On the NVIDIA (vLLM) platforms each configuration
+is repeated three times and we report the median with run-to-run variability;
+Optimum-Habana reports throughput aggregated over its own repeated iterations within
+a single process. Token throughput and peak accelerator memory are recorded on every
+platform, and TTFT, ITL/TPOT, and end-to-end latency on the NVIDIA platforms where
+vLLM exposes the prefill/decode split. Board power is sampled live via
+\texttt{nvidia-smi} on the GPUs and \texttt{hl-smi} on Gaudi2 and integrated into an
+energy-per-token metric; each job sees only its own accelerator, so no co-located
+workload contributes to the sampled power.

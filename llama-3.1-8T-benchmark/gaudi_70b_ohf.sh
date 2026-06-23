@@ -65,8 +65,11 @@ echo "which python : $(command -v python)"
 python -c "import sys; print('sys.prefix  :', sys.prefix)"
 echo "PYTHONPATH   : ${PYTHONPATH:-<unset>}"
 pip show optimum-habana 2>/dev/null | grep -iE '^(Version|Location|Editable)' || echo "pip: optimum-habana NOT registered in this env"
-python -c "import optimum.habana as oh; print('optimum.habana:', oh.__file__, oh.__version__)" \
-  || { echo "FATAL: optimum.habana not importable in ${MAMBA_ENV}; aborting before sweep."; exit 1; }
+# Import the SAME entrypoint the run uses (setup_env -> adapt_transformers_to_gaudi),
+# which pulls in the full models list (glm4v -> torchvision). A bare
+# `import optimum.habana` is too shallow and passes even when this path is broken.
+python -c "import optimum.habana as oh; from optimum.habana.transformers.modeling_utils import adapt_transformers_to_gaudi; print('optimum.habana:', oh.__file__, oh.__version__)" \
+  || { echo "FATAL: adapt_transformers_to_gaudi not importable in ${MAMBA_ENV} (check torchvision); aborting before sweep."; exit 1; }
 echo "=== END PREFLIGHT ==="
 
 launch_one () {
