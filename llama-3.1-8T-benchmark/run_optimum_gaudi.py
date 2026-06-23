@@ -305,9 +305,13 @@ def main():
     print(f"Throughput std = {thr_std:.2f} tokens/s")
     print(f"Average end to end latency = {e2e_ms:.2f} ms")
 
-    # prefer hl-smi peak mem; fall back to run_generation.py's reported numbers
-    if sampler and sampler.peak_mem_gb is not None:
-        mem_max = sampler.peak_mem_gb
+    # NOTE: hl-smi `memory.used` does NOT track Synapse/HBM tensor allocations on
+    # Gaudi (it stays near the idle ~0.75 GB even with ~19 GB of live tensors), so
+    # sampler.peak_mem_gb badly under-reports. Trust run_generation.py's
+    # torch.hpu.max_memory_allocated() value (mem_max) for peak memory — the direct
+    # analog of torch.cuda.max_memory_allocated() on the NVIDIA side. hl-smi is
+    # still used for board power/energy below, where it is accurate.
+    if sampler and sampler.mem_total is not None:
         mem_total = sampler.mem_total or mem_total
     if mem_alloc is not None:
         print(f"Memory allocated = {mem_alloc:.2f} GB")
