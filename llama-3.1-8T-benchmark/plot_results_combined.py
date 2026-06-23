@@ -128,7 +128,7 @@ def main():
     os.makedirs(outdir, exist_ok=True)
 
     for model in [m for m in ["8B", "70B"] if (df.model_label == m).any()]:
-        combined_figure(df, model, f"combined_{model}.pdf", outdir)
+        combined_figure(df, model, f"combined_{model}.png", outdir)
 
     print(f"All combined plots saved → {outdir}")
 
