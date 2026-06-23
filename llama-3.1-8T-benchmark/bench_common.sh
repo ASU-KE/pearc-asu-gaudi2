@@ -46,6 +46,11 @@ run_sweep () {
     export SINGULARITYENV_HF_TOKEN="${HF_TOKEN}"
   fi
 
+  # Bind /scratch into apptainer containers so $HF_HOME (token + weight cache) is
+  # visible inside the container and the model cache persists across runs.
+  export APPTAINER_BINDPATH="${APPTAINER_BINDPATH:+${APPTAINER_BINDPATH},}/scratch"
+  export SINGULARITY_BINDPATH="${SINGULARITY_BINDPATH:+${SINGULARITY_BINDPATH},}/scratch"
+
   # parse_log.py owns the CSV header (writes it on the first append).
   for entry in "${RUNS[@]}"; do
     IFS=':' read -r mlabel mid prec mtp offload <<< "${entry}"
@@ -83,7 +88,7 @@ run_sweep () {
           > "${logfile}" 2>&1 || echo "  ⚠ run failed – see ${logfile}"
         wall_time=$(( SECONDS - wall_start ))
 
-        python "${BENCH_ROOT}/parse_log.py" \
+        python3 "${BENCH_ROOT}/parse_log.py" \
           "${logfile}" "${DEVICE}" "${stamp}" "${out}" "${bs}" \
           "${run_id}" "${wall_time}" "${RESULTS_CSV}" \
           || echo "  ⚠ parse failed for ${run_id}"

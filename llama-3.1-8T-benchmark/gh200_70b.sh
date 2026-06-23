@@ -30,8 +30,8 @@ mkdir -p "${LOGDIR}"
 
 # 5th field = GB of weights to offload to Grace memory (BF16 only).
 RUNS=(
-  "llama70b:meta-llama/Llama-3.1-70B-Instruct:fp8:1"
-  "llama70b:meta-llama/Llama-3.1-70B-Instruct:bf16:1:70"
+  "llama70b:NousResearch/Meta-Llama-3.1-70B-Instruct:fp8:1"
+  "llama70b:NousResearch/Meta-Llama-3.1-70B-Instruct:bf16:1:70"
 )
 IN_LEN=512
 OUT_LIST=(256)

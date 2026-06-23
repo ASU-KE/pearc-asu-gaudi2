@@ -26,8 +26,8 @@ RESULTS_CSV="${DEVDIR}/results.csv"
 mkdir -p "${LOGDIR}"
 
 RUNS=(
-  "llama70b:meta-llama/Llama-3.1-70B-Instruct:bf16:2"
-  "llama70b:meta-llama/Llama-3.1-70B-Instruct:fp8:2"
+  "llama70b:NousResearch/Meta-Llama-3.1-70B-Instruct:bf16:2"
+  "llama70b:NousResearch/Meta-Llama-3.1-70B-Instruct:fp8:2"
 )
 IN_LEN=512
 OUT_LIST=(256)

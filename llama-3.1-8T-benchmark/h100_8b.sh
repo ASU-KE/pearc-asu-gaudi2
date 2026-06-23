@@ -28,8 +28,8 @@ RESULTS_CSV="${DEVDIR}/results.csv"
 mkdir -p "${LOGDIR}"
 
 RUNS=(
-  "llama8b:meta-llama/Llama-3.1-8B-Instruct:bf16:1"
-  "llama8b:meta-llama/Llama-3.1-8B-Instruct:fp8:1"
+  "llama8b:NousResearch/Meta-Llama-3.1-8B-Instruct:bf16:1"
+  "llama8b:NousResearch/Meta-Llama-3.1-8B-Instruct:fp8:1"
 )
 IN_LEN=512
 OUT_LIST=(256)
