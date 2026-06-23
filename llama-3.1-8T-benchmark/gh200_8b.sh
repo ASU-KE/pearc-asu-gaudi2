@@ -7,13 +7,8 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --gres=gpu:1
 #SBATCH --time=04:00:00
-# Set partition/GRES to your GH200 nodes (e.g. -p gh, --gres=gpu:gh200:1).
-# GH200 is ARM (aarch64): use an aarch64 vLLM env/image, not the x86 one.
-#SBATCH -p general
+#SBATCH -p arm
 #SBATCH --exclusive
-# --exclusive reserves the whole node (no co-tenant jobs). bench_common.sh then
-# pins CUDA_VISIBLE_DEVICES to the first <tp> GPU(s) per run, so vLLM and the
-# power sampler use/measure exactly the intended card(s), not the idle remainder.
 
 # ============================================================
 #  GH200 — vLLM Llama-3.1-8B (BF16 + FP8), single card.
@@ -41,7 +36,7 @@ WARMUP_RUNS=1
 
 RUN_BACKEND=apptainer
 MAMBA_ENV="${MAMBA_ENV:-vllm-cuda-arm}"
-APPTAINER_SIF="${APPTAINER_SIF:-/packages/apps/simg/vllm-cu129-nightly-0426.sif}"
+APPTAINER_SIF="${APPTAINER_SIF:-/packages/aarch64/simg/vllm-26.05.post1-py3.sif}"
 DRIVER="${BENCH_ROOT}/run_vllm_cuda.py"
 
 export HF_HOME="/scratch/tianche5/huggingface"

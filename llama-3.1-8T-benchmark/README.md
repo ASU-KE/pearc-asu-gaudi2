@@ -17,6 +17,9 @@ per-config energy number. Implemented per `plan.txt`.
 |---|---|
 | `run_vllm_cuda.py` | vLLM driver for A100 (BF16) / H100 / GH200 (BF16, FP8) |
 | `run_vllm_gaudi.py` | vLLM driver for Gaudi2 HPU (BF16, FP8 via INC) |
+| `run_optimum_gaudi.py` | Optimum-Habana driver for Gaudi2 — **lazy mode + HPU graphs** (Feb baseline), same schema |
+| `gaudi_{8b,70b}_ohf.sh` | Gaudi2 **lazy-path** jobs → series `gaudi2-ohf` |
+| `plot_results_ohf.py` | overlay plots that add the `gaudi2-ohf` (lazy) series in a distinct colour |
 | `bench_common.sh` | shared sweep loop, sourced by every sbatch script |
 | `{gaudi,a100,h100,gh200}_8b.sh` | per-device **8B** jobs (single card, concurrency 1–128) |
 | `{gaudi,a100,h100,gh200}_70b.sh` | per-device **70B** jobs (multi-card, concurrency 1–32) |
@@ -44,6 +47,32 @@ python plot_results.py "$BENCH_ROOT/bench_results/merged.csv"
 
 Each device appends both models to one `bench_results/<device>/results.csv`
 (`rm` it to start clean). The exact vLLM version is recorded per row.
+
+## Gaudi2 lazy-mode track (`gaudi2-ohf`)
+
+The vLLM-Gaudi plugin image runs `torch.compile`/eager (its upstream-bridge torch
+can't do lazy mode). The classic, traditionally-tuned Habana path is **lazy mode +
+HPU graphs** via Optimum-Habana `run_generation.py` — the original Feb baseline.
+`run_optimum_gaudi.py` reproduces it behind the *same* CLI + printed schema, so
+`bench_common.sh` and `parse_log.py` are reused unchanged. It runs as a **separate
+series** (`device = gaudi2-ohf`) at the same workload shape as the vLLM sweep, so
+lazy-vs-compile lines up point-for-point.
+
+```bash
+# needs the mamba `gaudi` env (lazy-capable torch fork) + an optimum-habana checkout
+export OHF_TEXTGEN_DIR=/path/to/optimum-habana/examples/text-generation
+sbatch gaudi_8b_ohf.sh         # 8B BF16 + FP8, single card
+sbatch gaudi_70b_ohf.sh        # 70B BF16 (tp=2 via gaudi_spawn/DeepSpeed) + FP8
+
+bash merge_results.sh "$BENCH_ROOT"     # picks up bench_results/gaudi2-ohf/ too
+python plot_results_ohf.py "$BENCH_ROOT/bench_results/merged.csv"
+```
+
+FP8 here uses the **same** INC measurement prerequisite as the vLLM path, but the
+`hqt_output/` must exist under `OHF_TEXTGEN_DIR` (run the measurement pass with
+`run_generation.py --fp8 QUANT_CONFIG=…/maxabs_measure.json` from that dir first).
+TTFT/ITL are blank for this series (`run_generation.py` reports aggregate
+throughput, not a prefill/decode split), so those two panels omit it.
 
 ## Precision per platform
 

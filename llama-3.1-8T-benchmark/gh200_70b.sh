@@ -8,9 +8,8 @@
 #SBATCH --exclusive
 #SBATCH --gres=gpu:1
 #SBATCH --time=08:00:00
-# Set partition/GRES to your GH200 nodes (e.g. -p gh, --gres=gpu:gh200:1).
-# GH200 is ARM (aarch64): use an aarch64 vLLM env/image, not the x86 one.
-#SBATCH -p general
+#SBATCH -p arm
+#SBATCH --exclusive
 
 # ============================================================
 #  GH200 — vLLM Llama-3.1-70B (BF16 + FP8), SINGLE card (plan.txt).
@@ -41,7 +40,7 @@ WARMUP_RUNS=1
 
 RUN_BACKEND=apptainer
 MAMBA_ENV="${MAMBA_ENV:-vllm-cuda-arm}"
-APPTAINER_SIF="${APPTAINER_SIF:-/packages/apps/simg/vllm-cu129-nightly-0426.sif}"
+APPTAINER_SIF="${APPTAINER_SIF:-/packages/aarch64/simg/vllm-26.05.post1-py3.sif}"
 DRIVER="${BENCH_ROOT}/run_vllm_cuda.py"
 
 export HF_HOME="/scratch/tianche5/huggingface"
