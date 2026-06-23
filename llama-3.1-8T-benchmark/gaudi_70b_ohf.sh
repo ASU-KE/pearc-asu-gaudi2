@@ -35,7 +35,7 @@ BATCH_LIST=(1 8 32)            # add 64 if you want one more load point
 REPEATS=3
 WARMUP_RUNS=2                  # internal optimum-habana warmup per measured child
 
-MAMBA_ENV="${MAMBA_ENV:-gaudi-1.24.0}"
+MAMBA_ENV="${MAMBA_ENV:-gaudi-124}"
 DRIVER="${BENCH_ROOT}/run_optimum_gaudi.py"
 
 export OHF_TEXTGEN_DIR="${OHF_TEXTGEN_DIR:-/home/tianche5/optimum-habana/examples/text-generation}"
