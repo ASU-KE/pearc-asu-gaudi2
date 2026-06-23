@@ -109,7 +109,6 @@ def metric_panels(df, model, metric, ylabel, fname, outdir, logy=False):
     seqs = sorted(g.seq_len.dropna().unique())
     pairs = _dev_prec_pairs(g)
     offp = offload_pairs(sub)
-    single = len(seqs) == 1
 
     fig, axes = plt.subplots(1, len(seqs),
                              figsize=(max(5.5, 4.8 * len(seqs)), 4.3),
@@ -128,8 +127,7 @@ def metric_panels(df, model, metric, ylabel, fname, outdir, logy=False):
                         linestyle=PRECISION_STYLE.get(prec, "-"),
                         linewidth=2, markersize=6, capsize=3,
                         label=_label(dev, prec, offp))
-        if not single:                              # redundant when one seq
-            ax.set_title(f"output len = {int(seq)}", fontweight="bold")
+        ax.set_title(f"output len = {int(seq)}", fontweight="bold")
         ax.set_xlabel("Batch size (concurrency)")
         ax.set_xscale("log", base=2)
         ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
@@ -138,10 +136,7 @@ def metric_panels(df, model, metric, ylabel, fname, outdir, logy=False):
         ax.set_ylabel(ylabel if i == 0 else "")
         ax.grid(True, which="both", alpha=0.3)
 
-    y = _legend(fig, axes, ncol=min(len(pairs), 4))
-    suffix = f"  (output len {int(seqs[0])})" if single else ""
-    fig.suptitle(f"Llama-3.1-{model} — {ylabel}{suffix}", fontweight="bold",
-                 y=y + 0.06)
+    _legend(fig, axes, ncol=min(len(pairs), 4))
     fig.tight_layout()
     out = os.path.join(outdir, fname)
     fig.savefig(out, bbox_inches="tight", dpi=150)
@@ -160,7 +155,6 @@ def speedup_panels(df, model, precision, outdir, baseline="gaudi2"):
         return
     offp = offload_pairs(sub)
     seqs = sorted(g.seq_len.dropna().unique())
-    single = len(seqs) == 1
 
     fig, axes = plt.subplots(1, len(seqs),
                              figsize=(max(5.5, 4.8 * len(seqs)), 4.3),
@@ -184,17 +178,14 @@ def speedup_panels(df, model, precision, outdir, baseline="gaudi2"):
                             xytext=(0, 8), ha="center", fontsize=8,
                             fontweight="bold", color=DEVICE_STYLE[dev]["color"])
         ax.axhline(1.0, color="grey", ls="--", lw=0.8, alpha=0.6)
-        if not single:
-            ax.set_title(f"output len = {int(seq)}", fontweight="bold")
+        ax.set_title(f"output len = {int(seq)}", fontweight="bold")
         ax.set_xlabel("Batch size (concurrency)")
         ax.set_xscale("log", base=2)
         ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
         ax.set_ylabel(f"Speedup ({precision})" if i == 0 else "")
         ax.grid(True, alpha=0.3)
 
-    y = _legend(fig, axes, ncol=min(len(others), 4))
-    fig.suptitle(f"Llama-3.1-{model} — Gaudi2 throughput speedup ({precision}, same precision)",
-                 fontweight="bold", y=y + 0.06)
+    _legend(fig, axes, ncol=min(len(others), 4))
     fig.tight_layout()
     out = os.path.join(outdir, f"speedup_{model}_{precision}.pdf")
     fig.savefig(out, bbox_inches="tight", dpi=150)
