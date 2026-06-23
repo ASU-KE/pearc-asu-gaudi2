@@ -44,7 +44,10 @@ DRIVER="${BENCH_ROOT}/run_vllm_gaudi.py"
 
 export HF_HOME="/scratch/tianche5/huggingface"
 [ -f "${HF_HOME}/token" ] && export HUGGINGFACE_HUB_TOKEN="$(< "${HF_HOME}/token")"
-export PT_HPU_LAZY_MODE=1
+# This image ships the upstream plugin-bridge torch (2.10.0+cpu), which only
+# supports torch.compile/eager — NOT lazy mode. Forcing lazy (=1) makes
+# habana_frameworks abort on import and the HPU platform never registers.
+export PT_HPU_LAZY_MODE=0
 # FP8 (INC): calibrated maxabs config (see README → calibration).
 export QUANT_CONFIG_FP8="${BENCH_ROOT}/quantization_config/maxabs_quant.json"
 
