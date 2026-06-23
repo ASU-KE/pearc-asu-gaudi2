@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=bench-gh200-70b
-#SBATCH --output=/scratch/tianche5/gaudi_bench/bench_results/gh200/logs/gh200_70b_%j.out
-#SBATCH --error=/scratch/tianche5/gaudi_bench/bench_results/gh200/logs/gh200_70b_%j.err
+#SBATCH --output=/scratch/tianche5/pearc-asu-gaudi2/llama-3.1-8T-benchmark/bench_results/gh200/logs/gh200_70b_%j.out
+#SBATCH --error=/scratch/tianche5/pearc-asu-gaudi2/llama-3.1-8T-benchmark/bench_results/gh200/logs/gh200_70b_%j.err
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
@@ -22,7 +22,7 @@
 set -eo pipefail
 
 DEVICE="gh200"
-BENCH_ROOT="/scratch/tianche5/gaudi_bench"
+BENCH_ROOT="/scratch/tianche5/pearc-asu-gaudi2/llama-3.1-8T-benchmark"
 DEVDIR="${BENCH_ROOT}/bench_results/${DEVICE}"
 LOGDIR="${DEVDIR}/logs"
 RESULTS_CSV="${DEVDIR}/results.csv"
@@ -39,9 +39,9 @@ BATCH_LIST=(1 8 32)
 REPEATS=3
 WARMUP_RUNS=1
 
-RUN_BACKEND="${RUN_BACKEND:-mamba}"
+RUN_BACKEND=apptainer
 MAMBA_ENV="${MAMBA_ENV:-vllm-cuda-arm}"
-APPTAINER_SIF="${APPTAINER_SIF:-/scratch/tianche5/sif/vllm-cuda-arm.sif}"
+APPTAINER_SIF="${APPTAINER_SIF:-/packages/apps/simg/vllm-cu129-nightly-0426.sif}"
 DRIVER="${BENCH_ROOT}/run_vllm_cuda.py"
 
 export HF_HOME="/scratch/tianche5/huggingface"
@@ -57,7 +57,7 @@ launch_one () {
       --env HF_HOME="${HF_HOME}" \
       --env HUGGINGFACE_HUB_TOKEN="${HUGGINGFACE_HUB_TOKEN}" \
       --env CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES}" \
-      "${APPTAINER_SIF}" python "${DRIVER}" "$@"
+      "${APPTAINER_SIF}" python3 "${DRIVER}" "$@"
   else
     python "${DRIVER}" "$@"
   fi

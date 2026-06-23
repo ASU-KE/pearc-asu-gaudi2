@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=bench-gaudi2-70b
-#SBATCH --output=/scratch/tianche5/gaudi_bench/bench_results/gaudi2/logs/gaudi2_70b_%j.out
-#SBATCH --error=/scratch/tianche5/gaudi_bench/bench_results/gaudi2/logs/gaudi2_70b_%j.err
+#SBATCH --output=/scratch/tianche5/pearc-asu-gaudi2/llama-3.1-8T-benchmark/bench_results/gaudi2/logs/gaudi2_70b_%j.out
+#SBATCH --error=/scratch/tianche5/pearc-asu-gaudi2/llama-3.1-8T-benchmark/bench_results/gaudi2/logs/gaudi2_70b_%j.err
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
@@ -18,7 +18,7 @@
 set -eo pipefail
 
 DEVICE="gaudi2"
-BENCH_ROOT="/scratch/tianche5/gaudi_bench"
+BENCH_ROOT="/scratch/tianche5/pearc-asu-gaudi2/llama-3.1-8T-benchmark"
 DEVDIR="${BENCH_ROOT}/bench_results/${DEVICE}"
 LOGDIR="${DEVDIR}/logs"
 RESULTS_CSV="${DEVDIR}/results.csv"
@@ -51,12 +51,16 @@ fi
 launch_one () {
   if [ "${RUN_BACKEND}" = "apptainer" ]; then
     apptainer exec \
+      --bind /dev/hl0:/dev/hl0 \
+      --bind /dev/hl1:/dev/hl1 \
+      --bind /usr/lib/habanalabs:/usr/lib/habanalabs \
+      --bind /sys:/sys \
       --env HF_HOME="${HF_HOME}" \
       --env HUGGINGFACE_HUB_TOKEN="${HUGGINGFACE_HUB_TOKEN}" \
       --env PT_HPU_LAZY_MODE="${PT_HPU_LAZY_MODE}" \
       --env QUANT_CONFIG_FP8="${QUANT_CONFIG_FP8}" \
       --env HABANA_VISIBLE_MODULES="${HABANA_VISIBLE_MODULES}" \
-      "${APPTAINER_SIF}" python "${DRIVER}" "$@"
+      "${APPTAINER_SIF}" python3 "${DRIVER}" "$@"
   else
     python "${DRIVER}" "$@"
   fi
